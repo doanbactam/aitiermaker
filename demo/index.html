@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Tier Maker — Rank AI Models & Tools</title>
+<meta name="description" content="Drag-and-drop tier lists for AI models, coding agents, and creative tools.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>">
+<style>
+:root{
+  --bg:#0b0d12;--panel:#12151d;--panel2:#171b25;--line:rgba(255,255,255,.08);
+  --txt:#e8ebf2;--mut:#8b93a7;--acc:#6c8cff;--acc2:#38d39f;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{color-scheme:dark}
+body{background:var(--bg);color:var(--txt);font:15px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px;border-radius:6px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+header{position:sticky;top:0;z-index:50;background:rgba(11,13,18,.82);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.hbar{max-width:1100px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:19px;letter-spacing:-.02em;margin-right:auto}
+.brand .mark{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--acc),var(--acc2));display:grid;place-items:center;font-size:16px}
+.btn{background:var(--panel2);border:1px solid var(--line);padding:8px 14px;border-radius:10px;cursor:pointer;font-weight:600;font-size:13.5px;display:inline-flex;align-items:center;gap:6px;transition:.15s}
+.btn:hover{background:#1e2330;border-color:rgba(255,255,255,.16)}
+.btn.primary{background:linear-gradient(135deg,var(--acc),#5566e8);border-color:transparent;color:#fff}
+.btn.primary:hover{filter:brightness(1.1)}
+select.btn{appearance:none;padding-right:26px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238b93a7' stroke-width='1.6' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
+
+main{max-width:1100px;margin:0 auto;padding:22px 20px 60px}
+.titlebar{display:flex;align-items:baseline;gap:10px;margin:6px 0 16px;flex-wrap:wrap}
+#listTitle{font-size:26px;font-weight:800;letter-spacing:-.02em;outline:none;border-radius:8px;padding:2px 6px;min-width:60px}
+#listTitle:not(:focus):hover{background:var(--panel2)}
+#listTitle:empty::before{content:"Name your tier list";color:var(--mut)}
+.hint{color:var(--mut);font-size:12.5px}
+
+.board{display:flex;flex-direction:column;gap:10px}
+.trow{display:grid;grid-template-columns:150px 1fr;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.tlabel{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:10px 6px;cursor:default}
+.tlabel .ltr{font-size:34px;font-weight:900;line-height:1;color:rgba(0,0,0,.78)}
+.tlabel .sub,.tlabel .cnt{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:rgba(0,0,0,.55)}
+.tlabel .cnt{margin-top:4px;background:rgba(0,0,0,.14);padding:1px 8px;border-radius:99px}
+.tlabel [contenteditable]{outline:none;border-radius:6px;padding:0 4px}
+.tlabel [contenteditable]:focus{box-shadow:0 0 0 2px rgba(0,0,0,.25)}
+.tlabel .swatch{position:absolute;top:6px;left:6px;width:20px;height:20px;border-radius:6px;border:2px solid rgba(0,0,0,.25);cursor:pointer;padding:0;background:none}
+.tlabel .swatch::-webkit-color-swatch-wrapper{padding:0}
+.tlabel .swatch::-webkit-color-swatch{border:none;border-radius:4px}
+.tlabel .del{position:absolute;top:4px;right:4px;width:20px;height:20px;border:none;border-radius:6px;background:rgba(0,0,0,.16);color:rgba(0,0,0,.65);font-size:13px;line-height:1;cursor:pointer;opacity:0;transition:.15s}
+.trow:hover .del{opacity:1}
+.tlabel .del:hover{background:rgba(0,0,0,.3)}
+.dz{display:flex;flex-wrap:wrap;gap:8px;padding:10px;min-height:86px;align-content:flex-start}
+.dz.over,#pool.over{outline:2px dashed var(--acc);outline-offset:-4px}
+
+.poolwrap{margin-top:18px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+.poolhead{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.poolhead h2{font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);margin-right:auto}
+#search{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:7px 12px;width:210px}
+#search::placeholder{color:var(--mut)}
+
+.tile{position:relative;width:64px;height:64px;border-radius:12px;background:#eceef2;display:grid;place-items:center;cursor:grab;user-select:none;-webkit-user-select:none;transition:transform .12s;touch-action:manipulation}
+.tile:hover{transform:translateY(-2px)}
+.tile.sel{outline:3px solid var(--acc);outline-offset:1px}
+.tile.dragging{opacity:.35;cursor:grabbing}
+.tile img{width:50px;height:50px;object-fit:contain;border-radius:8px;pointer-events:none}
+.tile .fb{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:20px;color:#1a1d26}
+#pool,.dz{min-height:0}
+#pool{display:flex;flex-wrap:wrap;gap:8px;min-height:70px}
+.empty{color:var(--mut);font-size:12.5px;padding:6px 4px}
+
+dialog{background:var(--panel2);border:1px solid var(--line);border-radius:16px;color:var(--txt);padding:22px;width:min(420px,92vw);margin:auto}
+dialog::backdrop{background:rgba(5,6,10,.6);backdrop-filter:blur(3px)}
+dialog h3{font-size:17px;margin-bottom:6px}
+dialog p{color:var(--mut);font-size:13px;margin-bottom:14px}
+dialog label{display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:12px 0 5px}
+dialog input[type=text],dialog input[type=url]{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+dialog .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+dialog a{color:var(--acc)}
+
+footer{max-width:1100px;margin:0 auto;padding:0 20px 30px;color:var(--mut);font-size:12px;display:flex;gap:8px;align-items:center}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--acc2)}
+#toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(8px);background:#1e2330;border:1px solid var(--line);padding:9px 16px;border-radius:99px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:.2s;z-index:99}
+#toast.on{opacity:1;transform:translateX(-50%)}
+
+@media (max-width:640px){
+  .trow{grid-template-columns:84px 1fr}
+  .tlabel .ltr{font-size:24px}
+  .tlabel .sub{display:none}
+  #listTitle{font-size:20px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hbar">
+    <div class="brand"><span class="mark">🏆</span>AITierMaker</div>
+    <select id="presetSel" class="btn" aria-label="Choose preset"></select>
+    <button class="btn" id="addBtn">＋ Item</button>
+    <button class="btn" id="keyBtn" title="Logo source settings">🔑 Logos</button>
+    <button class="btn" id="shareBtn">🔗 Share</button>
+    <button class="btn primary" id="pngBtn">⬇ Export PNG</button>
+    <button class="btn" id="resetBtn" title="Reset to preset">↺</button>
+    <button class="btn" id="addRowBtn" title="Add tier row">＋ Row</button>
+  </div>
+</header>
+
+<main>
+  <div class="titlebar">
+    <span id="listTitle" contenteditable="plaintext-only" spellcheck="false"></span>
+    <span class="hint">drag tiles into tiers · click a tile then a tier on touch · double-click sends back to pool</span>
+  </div>
+
+  <section class="board" id="board"></section>
+
+  <section class="poolwrap">
+    <div class="poolhead">
+      <h2>Unranked</h2>
+      <input id="search" type="search" placeholder="Filter items…" aria-label="Filter items">
+    </div>
+    <div id="pool" class="tiles" data-zone="pool"></div>
+  </section>
+</main>
+
+<footer><span class="dot" id="keyDot"></span><span id="keyNote"></span></footer>
+
+<dialog id="addDlg" aria-label="Add item">
+  <h3>Add custom item</h3>
+  <p>Anything with a website gets a logo.</p>
+  <form method="dialog" id="addForm">
+    <label for="addName">Name</label>
+    <input id="addName" type="text" required placeholder="e.g. Perplexity Pro">
+    <label for="addDomain">Website / domain</label>
+    <input id="addDomain" type="text" placeholder="e.g. perplexity.ai">
+    <div class="actions">
+      <button class="btn" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn primary" id="addOk" value="ok">Add</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="keyDlg" aria-label="Logo settings">
+  <h3>Logo source</h3>
+  <p>Paste your free <a href="https://logo.dev" target="_blank" rel="noopener">Logo.dev</a> publishable key for crisp brand logos. Without a key, logos fall back to public favicon services.</p>
+  <label for="keyInput">Logo.dev publishable key</label>
+  <input id="keyInput" type="text" placeholder="pk_...">
+  <div class="actions">
+    <button class="btn" id="keyClear">Remove</button>
+    <button class="btn primary" id="keySave">Save</button>
+  </div>
+</dialog>
+
+<div id="toast" role="status"></div>
+
+<script>
+const $=s=>document.querySelector(s);
+const LS_STATE='aitier.state',LS_CUSTOM='aitier.customs',LS_KEY='aitier.logodev';
+
+const ITEMS={
+gpt5:["GPT-5","openai.com"],chatgpt:["ChatGPT","chatgpt.com"],claude:["Claude","claude.ai"],
+gemini:["Gemini","gemini.google.com"],grok:["Grok","grok.com"],deepseek:["DeepSeek","deepseek.com"],
+llama:["Llama","llama.com"],mistral:["Mistral","mistral.ai"],qwen:["Qwen","qwen.ai"],
+kimi:["Kimi","kimi.com"],glm:["GLM","z.ai"],perplexity:["Perplexity","perplexity.ai"],
+copilot:["Copilot","copilot.microsoft.com"],metaai:["Meta AI","meta.ai"],poe:["Poe","poe.com"],
+ccopilot:["GitHub Copilot","github.com"],claudecode:["Claude Code","claude.com"],codex:["Codex","openai.com"],
+cursor:["Cursor","cursor.com"],windsurf:["Windsurf","windsurf.com"],v0:["v0","v0.dev"],
+bolt:["Bolt","bolt.new"],lovable:["Lovable","lovable.dev"],replit:["Replit","replit.com"],
+aider:["Aider","aider.chat"],zed:["Zed","zed.dev"],devin:["Devin","devin.ai"],
+midjourney:["Midjourney","midjourney.com"],sora:["Sora","sora.com"],sd:["Stable Diffusion","stability.ai"],
+flux:["FLUX","bfl.ai"],ideogram:["Ideogram","ideogram.ai"],leonardo:["Leonardo.Ai","leonardo.ai"],
+runway:["Runway","runwayml.com"],kling:["Kling AI","klingai.com"],hailuo:["Hailuo AI","hailuoai.video"],
+elevenlabs:["ElevenLabs","elevenlabs.io"],suno:["Suno","suno.com"],udio:["Udio","udio.com"],
+heygen:["HeyGen","heygen.com"],hf:["Hugging Face","huggingface.co"],ollama:["Ollama","ollama.com"],
+langchain:["LangChain","langchain.com"],groq:["Groq","groq.com"],together:["Together AI","together.ai"],
+cerebras:["Cerebras","cerebras.ai"],notebooklm:["NotebookLM","notebooklm.google.com"],
+notion:["Notion AI","notion.com"],gamma:["Gamma","gamma.app"]};
+
+const PRESETS=[
+{id:"models",title:"Top AI Models 2026",
+ items:["gpt5","chatgpt","claude","gemini","grok","deepseek","llama","mistral","qwen","kimi","glm","perplexity","copilot","metaai","poe"],
+ seed:{S:["claude"],A:["gpt5","gemini"],B:["grok","deepseek"]}},
+{id:"coding",title:"Best AI Coding Tools",
+ items:["ccopilot","codex","claudecode","cursor","windsurf","v0","bolt","lovable","replit","aider","zed","devin"],
+ seed:{S:["claudecode"],A:["cursor","ccopilot"],B:["codex"]}},
+{id:"creative",title:"AI Image · Video · Music",
+ items:["midjourney","sora","sd","flux","ideogram","leonardo","runway","kling","hailuo","elevenlabs","suno","udio","heygen"],
+ seed:{S:["midjourney"],A:["sora","runway"],B:["suno"]}},
+{id:"mega",title:"Everything AI",items:Object.keys(ITEMS),seed:{}}
+];
+
+let CUSTOM={};
+try{CUSTOM=JSON.parse(localStorage.getItem(LS_CUSTOM)||"{}")}catch{}
+Object.assign(ITEMS,CUSTOM);
+
+const DEFAULT_ROWS=[
+{l:"S",sub:"Goated",c:"#ff6b6b"},{l:"A",sub:"Great",c:"#ffa94d"},
+{l:"B",sub:"Solid",c:"#ffd43b"},{l:"C",sub:"Fine",c:"#51cf66"},
+{l:"D",sub:"Mid",c:"#74c0fc"},{l:"F",sub:"Oof",c:"#b197fc"}];
+
+let state=null;
+
+function seed(preset){
+  const rows=DEFAULT_ROWS.map(r=>({...r,i:[]}));
+  for(const[l,ids]of Object.entries(preset.seed)){
+    const row=rows.find(r=>r.l===l);
+    if(row)row.i=[...ids];
+  }
+  const placed=new Set(Object.values(preset.seed).flat());
+  return{p:preset.id,t:preset.title,rows,pool:preset.items.filter(id=>!placed.has(id))};
+}
+
+function load(){
+  const m=location.hash.match(/^#s=(.+)$/);
+  if(m){try{const s=JSON.parse(b64d(m[1]));if(s&&s.rows)return s}catch{}}
+  try{const s=JSON.parse(localStorage.getItem(LS_STATE));if(s&&s.rows)return s}catch{}
+  return seed(PRESETS[0]);
+}
+const b64e=s=>btoa(unescape(encodeURIComponent(s))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+const b64d=s=>decodeURIComponent(escape(atob(s.replace(/-/g,"+").replace(/_/g,"/"))));
+const esc=s=>s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const save=()=>localStorage.setItem(LS_STATE,JSON.stringify(state));
+
+let dragEl=null,selectedId=null;
+const board=$("#board"),pool=$("#pool");
+
+function providers(domain){
+  const k=localStorage.getItem(LS_KEY);
+  const a=[];
+  if(k)a.push(`https://img.logo.dev/${domain}?token=${encodeURIComponent(k)}&size=144&format=png`);
+  a.push(`https://unavatar.io/${domain}`,`https://www.google.com/s2/favicons?sz=128&domain=${domain}`);
+  return a;
+}
+function tileHtml(id){
+  const it=ITEMS[id];if(!it)return"";
+  const[name,domain]=it;
+  return`<div class="tile" draggable="true" data-id="${esc(id)}" title="${esc(name)}" role="img" aria-label="${esc(name)}"><img src="${providers(domain)[0]}" alt="" draggable="false" data-step="0" data-domain="${esc(domain)}"><\/div>`;
+}
+function fbColor(s){let h=0;for(const ch of s)h=(h*31+ch.charCodeAt(0))%360;return`hsl(${h},70%,82%)`}
+function imgError(img){
+  const step=+img.dataset.step+1,list=providers(img.dataset.domain);
+  if(step<list.length){img.dataset.step=step;img.src=list[step]}
+  else{const fb=document.createElement("span");fb.className="fb";fb.style.background=fbColor(img.dataset.domain);fb.textContent=img.dataset.domain[0].toUpperCase();img.replaceWith(fb)}
+}
+document.addEventListener("error",e=>{if(e.target.tagName==="IMG")imgError(e.target)},true);
+
+function rowHtml(r,i){
+  return`<div class="trow" data-row="${i}">
+    <div class="tlabel" style="background:${r.c}">
+      <input type="color" class="swatch" data-pick="${i}" value="${r.c}" aria-label="Tier ${esc(r.l)} color" title="Tier color">
+      <span class="ltr" contenteditable="plaintext-only" spellcheck="false" data-ltr="${i}">${esc(r.l)}</span>
+      <span class="sub" contenteditable="plaintext-only" spellcheck="false" data-sub="${i}">${esc(r.sub)}</span>
+      <span class="cnt">${r.i.length}</span>
+      <button class="del" data-delrow="${i}" aria-label="Delete row">×</button>
+    </div>
+    <div class="dz" data-zone="row">${r.i.map(tileHtml).join("")||""}</div>
+  </div>`;
+}
+function render(){
+  $("#presetSel").value=state.p;
+  $("#listTitle").textContent=state.t;
+  board.innerHTML=state.rows.map(rowHtml).join("");
+  const q=$("#search").value.trim().toLowerCase();
+  pool.innerHTML=state.pool.map(tileHtml).join("")||`<span class="empty">Nothing left — everything is ranked 🎉</span>`;
+  [...pool.children].forEach(el=>{if(el.classList&&el.classList.contains("tile"))el.style.display=!q||ITEMS[el.dataset.id]?.[0].toLowerCase().includes(q)?"":"none"});
+  updateKeyUi();
+}
+function updateKeyUi(){
+  const has=!!localStorage.getItem(LS_KEY);
+  $("#keyDot").style.background=has?"var(--acc2)":"#ffb84d";
+  $("#keyNote").textContent=has?"Logos served by Logo.dev":"Fallback logo mode — add a Logo.dev key via 🔑 Logos";
+}
+
+function reconcile(){
+  state.rows.forEach((r,i)=>{
+    const dz=board.children[i]?.querySelector(".dz");
+    if(dz)r.i=[...dz.querySelectorAll(".tile")].map(t=>t.dataset.id);
+  });
+  state.pool=[...pool.querySelectorAll(".tile")].map(t=>t.dataset.id);
+  save();
+}
+
+document.addEventListener("dragstart",e=>{
+  const t=e.target.closest(".tile");if(!t)return;
+  dragEl=t;t.classList.add("dragging");
+  e.dataTransfer.effectAllowed="move";
+  e.dataTransfer.setData("text/plain",t.dataset.id);
+});
+document.addEventListener("dragover",e=>{
+  const zone=e.target.closest(".dz,#pool");
+  if(!zone||!dragEl)return;
+  e.preventDefault();
+  document.querySelectorAll(".over").forEach(z=>z.classList.remove("over"));
+  zone.classList.add("over");
+  const sibs=[...zone.querySelectorAll(".tile")].filter(s=>s!==dragEl);
+  if(!sibs.length){zone.appendChild(dragEl);return}
+  let best=null,bd=Infinity;
+  for(const s of sibs){
+    const r=s.getBoundingClientRect();
+    const dx=e.clientX-(r.left+r.width/2),dy=e.clientY-(r.top+r.height/2),d=dx*dx+dy*dy;
+    if(d<bd){bd=d;best=s}
+  }
+  const r=best.getBoundingClientRect();
+  const sameRow=Math.abs(e.clientY-(r.top+r.height/2))<=r.height/2;
+  const goAfter=sameRow?e.clientX>r.left+r.width/2:e.clientY>r.top+r.height/2;
+  if(goAfter){best.nextSibling?zone.insertBefore(dragEl,best.nextSibling):zone.appendChild(dragEl)}
+  else zone.insertBefore(dragEl,best);
+});
+document.addEventListener("dragleave",e=>{if(e.target.closest?.(".dz,#pool"))e.target.closest(".dz,#pool").classList.remove("over")});
+document.addEventListener("drop",e=>{e.preventDefault()});
+document.addEventListener("dragend",()=>{
+  if(!dragEl)return;
+  dragEl.classList.remove("dragging");
+  document.querySelectorAll(".over").forEach(z=>z.classList.remove("over"));
+  dragEl=null;reconcile();render();
+});
+
+document.addEventListener("click",e=>{
+  const tile=e.target.closest(".tile");
+  if(selectedId){
+    const zone=e.target.closest(".dz,#pool");
+    const cur=document.querySelector(`.tile[data-id="${CSS.escape(selectedId)}"]`);
+    if(zone&&cur&&!cur.contains(e.target)){
+      const target=e.target.closest(".tile");
+      if(target&&target!==cur)target.parentNode.insertBefore(cur,target);
+      else if(!target)zone.appendChild(cur);
+      selectedId=null;reconcile();render();
+      return;
+    }
+    if(cur&&cur.contains(e.target)){selectedId=null;cur.classList.remove("sel");return}
+    selectedId=null;document.querySelectorAll(".tile.sel").forEach(t=>t.classList.remove("sel"));
+  }
+  if(tile){selectedId=tile.dataset.id;tile.classList.add("sel")}
+});
+
+document.addEventListener("dblclick",e=>{
+  const tile=e.target.closest(".tile");if(!tile)return;
+  pool.appendChild(tile);reconcile();render();
+});
+
+board.addEventListener("input",e=>{
+  const i=+e.target.dataset.ltr??NaN;
+  if(e.target.dataset.ltr!==undefined)state.rows[i].l=e.target.textContent.trim()||"?";
+  if(e.target.dataset.sub!==undefined)state.rows[i].sub=e.target.textContent.trim();
+  if(e.target.dataset.pick!==undefined){
+    state.rows[i].c=e.target.value;
+    board.children[i].querySelector(".tlabel").style.background=e.target.value;
+  }
+  save();
+});
+board.addEventListener("keydown",e=>{
+  if(e.target.matches("[contenteditable]")&&e.key==="Enter"){e.preventDefault();e.target.blur()}
+});
+board.addEventListener("click",e=>{
+  const del=e.target.closest("[data-delrow]");
+  if(del){
+    const i=+del.dataset.delrow,r=state.rows[i];
+    if(r.i.length&&!confirm(`Delete tier "${r.l}"? Its ${r.i.length} items go back to Unranked.`))return;
+    state.pool.push(...r.i);state.rows.splice(i,1);save();render();
+  }
+});
+
+$("#listTitle").addEventListener("blur",()=>{state.t=$("#listTitle").textContent.trim()||"Untitled";save()});
+$("#search").addEventListener("input",()=>{
+  const q=$("#search").value.trim().toLowerCase();
+  [...pool.children].forEach(el=>{
+    if(!el.classList.contains("tile"))return;
+    el.style.display=!q||ITEMS[el.dataset.id][0].toLowerCase().includes(q)?"":"none";
+  });
+});
+
+$("#presetSel").innerHTML=PRESETS.map(p=>`<option value="${p.id}">${p.title}</option>`).join("");
+$("#presetSel").onchange=()=>{
+  if(state.rows.some(r=>r.i.length)&&!confirm("Switch preset? Current ranking will be lost.")){$("#presetSel").value=state.p;return}
+  state=seed(PRESETS.find(p=>p.id===$("#presetSel").value)||PRESETS[0]);save();render();
+};
+$("#resetBtn").onclick=()=>{
+  if(!confirm("Reset this tier list?"))return;
+  state=seed(PRESETS.find(p=>p.id===state.p)||PRESETS[0]);save();render();
+};
+
+$("#addBtn").onclick=()=>$("#addDlg").showModal();
+$("#addOk").onclick=e=>{
+  const name=$("#addName").value.trim();if(!name)return;
+  let d=$("#addDomain").value.trim().replace(/^https?:\/\//,"").replace(/\/.*$/,"");
+  if(!d)d=name.toLowerCase().replace(/[^a-z0-9]/g,"")+".com";
+  const id="u"+Date.now().toString(36);
+  CUSTOM[id]=[name,d];ITEMS[id]=CUSTOM[id];
+  localStorage.setItem(LS_CUSTOM,JSON.stringify(CUSTOM));
+  state.pool.push(id);save();render();
+  $("#addForm").reset();
+};
+
+$("#addRowBtn").onclick=()=>{
+  state.rows.push({l:String.fromCharCode(65+((state.rows.length+3)%26)),sub:"New",c:"#9775fa",i:[]});
+  save();render();
+};
+$("#keyBtn").onclick=()=>{$("#keyInput").value=localStorage.getItem(LS_KEY)||"";$("#keyDlg").showModal()};
+$("#keySave").onclick=()=>{
+  const v=$("#keyInput").value.trim();
+  v?localStorage.setItem(LS_KEY,v):localStorage.removeItem(LS_KEY);
+  $("#keyDlg").close();updateKeyUi();render();toast(v?"Logo.dev key saved ✓":"Key removed");
+};
+$("#keyClear").onclick=()=>{localStorage.removeItem(LS_KEY);$("#keyDlg").close();updateKeyUi();render();toast("Key removed")};
+
+$("#shareBtn").onclick=async()=>{
+  const h="#s="+b64e(JSON.stringify(state));
+  history.replaceState(null,"",location.pathname+h);
+  try{await navigator.clipboard.writeText(location.href);toast("Link copied ✓")}
+  catch{toast("Link is in the address bar")}
+};
+
+let toastT;
+function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("on");clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("on"),2200)}
+
+function rr(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+
+async function loadImage(domain){
+  return new Promise(res=>{
+    const list=providers(domain);let i=0;
+    const img=new Image();img.crossOrigin="anonymous";
+    const timer=setTimeout(()=>res(null),4000);
+    img.onload=()=>{clearTimeout(timer);res(img)};
+    img.onerror=()=>{if(++i<list.length)img.src=list[i];else{clearTimeout(timer);res(null)}};
+    img.src=list[0];
+  });
+}
+
+$("#pngBtn").onclick=async()=>{
+  const W=1080,PAD=22,LW=180,TILE=94,GAP=10,TH=118;
+  const cols=Math.floor((W-LW-PAD*2-GAP)/(TILE+GAP));
+  const rowsData=state.rows.map(r=>({...r,chunks:[]}));
+  for(const r of rowsData)for(let i=0;i<r.i.length;i+=cols)r.chunks.push(r.i.slice(i,i+cols));
+  const bodyH=rowsData.reduce((a,r)=>a+Math.max(1,r.chunks.length)*TH+PAD,0);
+  const H=110+bodyH+46;
+  const cv=document.createElement("canvas");cv.width=W;cv.height=H;
+  const x=cv.getContext("2d");
+  x.fillStyle="#0b0d12";x.fillRect(0,0,W,H);
+  const grad=x.createLinearGradient(PAD,0,W-PAD,0);
+  grad.addColorStop(0,"#6c8cff");grad.addColorStop(1,"#38d39f");
+  x.fillStyle=grad;x.font="800 34px ui-sans-serif,system-ui,sans-serif";
+  x.textBaseline="alphabetic";
+  x.fillText(state.t.slice(0,42)||"AI Tier List",PAD,58);
+  const imgs={};
+  const all=state.rows.flatMap(r=>r.i);
+  await Promise.all(all.map(async id=>{imgs[id]=await loadImage(ITEMS[id][1])}));
+  let y=104;
+  for(const r of rowsData){
+    const rh=Math.max(1,r.chunks.length)*TH;
+    x.fillStyle=r.c;rr(x,PAD,y,LW,rh-PAD+10,14);x.fill();
+    x.fillStyle="rgba(0,0,0,.78)";
+    x.font="900 44px ui-sans-serif,system-ui,sans-serif";x.textAlign="center";
+    x.fillText(r.l,PAD+LW/2,y+rh/2-8);
+    x.font="700 13px ui-sans-serif,system-ui,sans-serif";
+    x.fillText(r.sub.toUpperCase(),PAD+LW/2,y+rh/2+18);
+    x.textAlign="left";
+    let cy=y;
+    for(const chunk of r.chunks){
+      chunk.forEach((id,j)=>{
+        const tx=PAD+LW+GAP+j*(TILE+GAP);
+        x.fillStyle="#eceef2";rr(x,tx,cy,TILE,TILE,14);x.fill();
+        const cx=tx+TILE/2;
+        const im=imgs[id];
+        x.fillStyle="#333";
+        x.font="700 11px ui-sans-serif,system-ui,sans-serif";x.textAlign="center";
+        x.fillText(ITEMS[id][0].slice(0,14),cx,cy+TILE-8,TILE-8);
+        if(im){
+          const s=54,ar=im.width/im.height;
+          let dw=s,dh=s;if(ar>1)dh=s/ar;else dw=s*ar;
+          x.drawImage(im,cx-dw/2,cy+(TILE-16)/2-dh/2+2,dw,dh);
+        }else{
+          x.fillStyle=fbColor(ITEMS[id][1]);
+          x.beginPath();x.arc(cx,cy+(TILE-16)/2,22,0,7);x.fill();
+          x.fillStyle="#1a1d26";x.font="800 22px ui-sans-serif,system-ui,sans-serif";
+          x.fillText(ITEMS[id][1][0].toUpperCase(),cx,cy+(TILE-16)/2+8);
+        }
+        x.textAlign="left";
+      });
+      cy+=TH;
+    }
+    y+=rh+PAD;
+  }
+  x.fillStyle="rgba(255,255,255,.3)";x.font="600 13px ui-sans-serif,system-ui,sans-serif";x.textAlign="right";
+  x.fillText("⚡ aitiermaker",W-PAD,H-16);x.textAlign="left";
+  cv.toBlob(b=>{
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(b);
+    a.download=(state.t||"ai-tier-list").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")+".png";
+    a.click();URL.revokeObjectURL(a.href);
+    toast("PNG exported ✓");
+  });
+};
+
+state=load();
+render();
+</script>
+</body>
+</html>

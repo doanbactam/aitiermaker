@@ -1,0 +1,80 @@
+import type { CatalogItem } from "@/lib/types";
+
+const UPDATED = "2026-08";
+
+export const CUSTOM_FIELDS_NOTE = "Giá = USD/MTok in/out. ctx = tokens. Nguồn tham chiếu: LMArena, Artificial Analysis (2026-08).";
+
+export const CATALOG: CatalogItem[] = [
+  { mark: "openai", id: "gpt5", name: "GPT-5.6", vendor: "OpenAI", domain: "openai.com", cat: "chat", license: "proprietary", ctx: 400_000, price: { in: 1.25, out: 10 }, updated: UPDATED },
+  { mark: "openai", id: "chatgpt", name: "ChatGPT", vendor: "OpenAI", domain: "chatgpt.com", cat: "chat", license: "proprietary", updated: UPDATED },
+  { mark: "anthropic", id: "claude", name: "Claude 4.6", vendor: "Anthropic", domain: "claude.ai", cat: "chat", license: "proprietary", updated: UPDATED },
+  { mark: "anthropic", id: "opus5", name: "Claude Opus 5", vendor: "Anthropic", domain: "anthropic.com", cat: "chat", license: "proprietary", ctx: 1_000_000, price: { in: 5, out: 25 }, updated: UPDATED },
+  { mark: "anthropic", id: "fable5", name: "Claude Fable 5", vendor: "Anthropic", domain: "anthropic.com", cat: "chat", license: "proprietary", elo: 1509, updated: UPDATED },
+  { mark: "anthropic", id: "sonnet5", name: "Claude Sonnet 5", vendor: "Anthropic", domain: "anthropic.com", cat: "chat", license: "proprietary", price: { in: 2, out: 10 }, updated: UPDATED },
+  { mark: "googlegemini", id: "gemini", name: "Gemini 3.1", vendor: "Google", domain: "gemini.google.com", cat: "chat", license: "proprietary", updated: UPDATED },
+  { id: "grok", name: "Grok 4.6", vendor: "xAI", domain: "grok.com", cat: "chat", license: "proprietary", ctx: 256_000, price: { in: 2, out: 6 }, updated: UPDATED },
+  { mark: "deepseek", id: "deepseek", name: "DeepSeek V4", vendor: "DeepSeek", domain: "deepseek.com", cat: "chat", license: "open", updated: UPDATED },
+  { mark: "meta", id: "llama", name: "Llama 4", vendor: "Meta", domain: "llama.com", cat: "chat", license: "open", ctx: 10_000_000, updated: UPDATED },
+  { mark: "mistralai", id: "mistral", name: "Mistral Medium 3", vendor: "Mistral AI", domain: "mistral.ai", cat: "chat", license: "open", updated: UPDATED },
+  { mark: "alibabacloud", id: "qwen", name: "Qwen 3.8", vendor: "Alibaba", domain: "qwen.ai", cat: "chat", license: "open", updated: UPDATED },
+  { id: "kimi", name: "Kimi K3", vendor: "Moonshot AI", domain: "kimi.com", cat: "chat", license: "open", ctx: 1_000_000, price: { in: 3, out: 15 }, elo: 1674, updated: UPDATED },
+  { id: "glm", name: "GLM-5", vendor: "Z.ai", domain: "z.ai", cat: "chat", license: "open", updated: UPDATED },
+  { mark: "perplexity", id: "perplexity", name: "Perplexity", vendor: "Perplexity", domain: "perplexity.ai", cat: "chat", license: "proprietary", updated: UPDATED },
+  { mark: "github", id: "copilot", name: "Copilot", vendor: "Microsoft", domain: "copilot.microsoft.com", cat: "chat", license: "proprietary", updated: UPDATED },
+  { mark: "meta", id: "metaai", name: "Meta AI", vendor: "Meta", domain: "meta.ai", cat: "chat", license: "proprietary", updated: UPDATED },
+  { id: "poe", name: "Poe", vendor: "Quora", domain: "poe.com", cat: "chat", license: "proprietary", updated: UPDATED },
+
+  { mark: "github", id: "ccopilot", name: "GitHub Copilot", vendor: "GitHub", domain: "github.com", cat: "coding", license: "proprietary", updated: UPDATED },
+  { mark: "anthropic", id: "claudecode", name: "Claude Code", vendor: "Anthropic", domain: "claude.com", cat: "coding", license: "proprietary", updated: UPDATED },
+  { mark: "openai", id: "codex", name: "Codex 5.6", vendor: "OpenAI", domain: "openai.com", cat: "coding", license: "proprietary", updated: UPDATED },
+  { mark: "cursor", id: "composer", name: "Composer 2.5", vendor: "Cursor", domain: "cursor.com", cat: "coding", license: "proprietary", updated: UPDATED },
+  { mark: "cursor", id: "cursor", name: "Cursor", vendor: "Anysphere", domain: "cursor.com", cat: "coding", license: "proprietary", updated: UPDATED },
+  { id: "windsurf", name: "Windsurf", vendor: "Windsurf", domain: "windsurf.com", cat: "coding", license: "proprietary", updated: UPDATED },
+  { id: "opencode", name: "OpenCode", vendor: "OpenCode", domain: "opencode.ai", cat: "coding", license: "open", updated: UPDATED },
+  { id: "aider", name: "Aider", vendor: "Aider", domain: "aider.chat", cat: "coding", license: "open", updated: UPDATED },
+  { mark: "cline", id: "cline", name: "Cline", vendor: "Cline", domain: "cline.bot", cat: "coding", license: "open", updated: UPDATED },
+  { mark: "vercel", id: "v0", name: "v0", vendor: "Vercel", domain: "v0.dev", cat: "coding", license: "proprietary", updated: UPDATED },
+  { id: "bolt", name: "Bolt", vendor: "StackBlitz", domain: "bolt.new", cat: "coding", license: "proprietary", updated: UPDATED },
+  { id: "lovable", name: "Lovable", vendor: "Lovable", domain: "lovable.dev", cat: "coding", license: "proprietary", updated: UPDATED },
+  { mark: "replit", id: "replit", name: "Replit", vendor: "Replit", domain: "replit.com", cat: "coding", license: "proprietary", updated: UPDATED },
+  { mark: "zedindustries", id: "zed", name: "Zed", vendor: "Zed Industries", domain: "zed.dev", cat: "coding", license: "open", updated: UPDATED },
+  { id: "devin", name: "Devin", vendor: "Cognition", domain: "devin.ai", cat: "coding", license: "proprietary", updated: UPDATED },
+
+  { id: "midjourney", name: "Midjourney", vendor: "Midjourney", domain: "midjourney.com", cat: "image", license: "proprietary", updated: UPDATED },
+  { id: "flux", name: "FLUX", vendor: "Black Forest Labs", domain: "bfl.ai", cat: "image", license: "open", updated: UPDATED },
+  { id: "sd", name: "Stable Diffusion", vendor: "Stability AI", domain: "stability.ai", cat: "image", license: "open", updated: UPDATED },
+  { id: "ideogram", name: "Ideogram", vendor: "Ideogram", domain: "ideogram.ai", cat: "image", license: "proprietary", updated: UPDATED },
+  { id: "leonardo", name: "Leonardo.Ai", vendor: "Leonardo", domain: "leonardo.ai", cat: "image", license: "proprietary", updated: UPDATED },
+  { id: "recraft", name: "Recraft", vendor: "Recraft", domain: "recraft.ai", cat: "image", license: "proprietary", updated: UPDATED },
+  { id: "krea", name: "Krea", vendor: "Krea", domain: "krea.ai", cat: "image", license: "proprietary", updated: UPDATED },
+
+  { mark: "openai", id: "sora", name: "Sora", vendor: "OpenAI", domain: "sora.com", cat: "video", license: "proprietary", updated: UPDATED },
+  { id: "runway", name: "Runway", vendor: "Runway", domain: "runwayml.com", cat: "video", license: "proprietary", updated: UPDATED },
+  { id: "kling", name: "Kling AI", vendor: "Kuaishou", domain: "klingai.com", cat: "video", license: "proprietary", updated: UPDATED },
+  { id: "hailuo", name: "Hailuo AI", vendor: "MiniMax", domain: "hailuoai.video", cat: "video", license: "proprietary", updated: UPDATED },
+  { id: "veo", name: "Veo", vendor: "Google", domain: "labs.google", cat: "video", license: "proprietary", updated: UPDATED },
+  { id: "heygen", name: "HeyGen", vendor: "HeyGen", domain: "heygen.com", cat: "video", license: "proprietary", updated: UPDATED },
+  { id: "synthesia", name: "Synthesia", vendor: "Synthesia", domain: "synthesia.io", cat: "video", license: "proprietary", updated: UPDATED },
+  { mark: "elevenlabs", id: "elevenlabs", name: "ElevenLabs", vendor: "ElevenLabs", domain: "elevenlabs.io", cat: "audio", license: "proprietary", updated: UPDATED },
+  { mark: "suno", id: "suno", name: "Suno", vendor: "Suno", domain: "suno.com", cat: "audio", license: "proprietary", updated: UPDATED },
+  { id: "udio", name: "Udio", vendor: "Udio", domain: "udio.com", cat: "audio", license: "proprietary", updated: UPDATED },
+
+  { mark: "ollama", id: "ollama", name: "Ollama", vendor: "Ollama", domain: "ollama.com", cat: "local", license: "open", updated: UPDATED },
+  { id: "lmstudio", name: "LM Studio", vendor: "LM Studio", domain: "lmstudio.ai", cat: "local", license: "proprietary", updated: UPDATED },
+  { id: "openwebui", name: "Open WebUI", vendor: "Open WebUI", domain: "openwebui.com", cat: "local", license: "open", updated: UPDATED },
+  { id: "jan", name: "Jan", vendor: "Jan", domain: "jan.ai", cat: "local", license: "open", updated: UPDATED },
+  { id: "comfyui", name: "ComfyUI", vendor: "Comfy Org", domain: "comfy.org", cat: "local", license: "open", updated: UPDATED },
+  { id: "vllm", name: "vLLM", vendor: "vLLM", domain: "vllm.ai", cat: "local", license: "open", updated: UPDATED },
+  { id: "llamacpp", name: "llama.cpp", vendor: "ggml", domain: "github.com", cat: "local", license: "open", updated: UPDATED },
+
+  { mark: "huggingface", id: "hf", name: "Hugging Face", vendor: "Hugging Face", domain: "huggingface.co", cat: "infra", license: "proprietary", updated: UPDATED },
+  { mark: "langchain", id: "langchain", name: "LangChain", vendor: "LangChain", domain: "langchain.com", cat: "infra", license: "open", updated: UPDATED },
+  { id: "groq", name: "Groq", vendor: "Groq", domain: "groq.com", cat: "infra", license: "proprietary", updated: UPDATED },
+  { id: "together", name: "Together AI", vendor: "Together", domain: "together.ai", cat: "infra", license: "proprietary", updated: UPDATED },
+  { id: "cerebras", name: "Cerebras", vendor: "Cerebras", domain: "cerebras.ai", cat: "infra", license: "proprietary", updated: UPDATED },
+  { id: "notebooklm", name: "NotebookLM", vendor: "Google", domain: "notebooklm.google.com", cat: "infra", license: "proprietary", updated: UPDATED },
+  { id: "gamma", name: "Gamma", vendor: "Gamma", domain: "gamma.app", cat: "infra", license: "proprietary", updated: UPDATED },
+  { mark: "notion", id: "notion", name: "Notion AI", vendor: "Notion", domain: "notion.com", cat: "infra", license: "proprietary", updated: UPDATED },
+];
+
+export const ITEMS: Record<string, CatalogItem> = Object.fromEntries(CATALOG.map((i) => [i.id, i]));
