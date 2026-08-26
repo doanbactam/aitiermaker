@@ -20,7 +20,7 @@ function Shell({
     <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
         <Dialog.Backdrop className="dialog-backdrop fixed inset-0" />
-        <Dialog.Popup className="dialog-panel fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+        <Dialog.Popup className="dialog-panel">
           <Dialog.Title className="text-[17px] font-bold tracking-tight">{title}</Dialog.Title>
           <Dialog.Description className="mt-1 text-[13px] leading-relaxed text-[#8b8f98]">{desc}</Dialog.Description>
           {children}

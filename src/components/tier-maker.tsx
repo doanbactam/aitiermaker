@@ -335,7 +335,7 @@ export default function TierMaker() {
   return (
     <>
       <header className="site-header">
-        <div className="mx-auto flex max-w-[1100px] flex-wrap items-center gap-2 px-5 py-3">
+        <div className="mx-auto flex max-w-[1100px] flex-nowrap items-center gap-2 overflow-x-auto px-5 py-3">
           <div className="mr-auto flex items-center gap-2.5 text-[15px] font-extrabold tracking-tight">
             <span className="brand-mark" aria-hidden="true" />
             AI TIER MAKER<span className="text-[#c8f04b]">.</span>
@@ -350,22 +350,19 @@ export default function TierMaker() {
           <button type="button" className="btn" onClick={() => setAddOpen(true)}>
             + Item
           </button>
-          <button type="button" className="btn hide-sm" onClick={addRow} title="Add tier row">
-            + Row
-          </button>
           <button type="button" className="btn btn-primary" onClick={share}>
             Share
           </button>
           <button type="button" className="btn hide-sm" disabled={busy} onClick={() => runExport("download")}>
             {busy ? "Rendering…" : "Download PNG"}
           </button>
-          <div className="relative show-sm" ref={moreRef}>
+          <div className="relative" ref={moreRef}>
             <button type="button" className="btn" aria-expanded={moreOpen} aria-haspopup="menu" onClick={() => setMoreOpen((v) => !v)}>
               More
             </button>
             {moreOpen && (
               <div className="more-menu" role="menu">
-                <button type="button" className="btn" role="menuitem" disabled={busy} onClick={() => { setMoreOpen(false); runExport("download"); }}>
+                <button type="button" className="btn show-sm" role="menuitem" disabled={busy} onClick={() => { setMoreOpen(false); runExport("download"); }}>
                   Download PNG
                 </button>
                 <button type="button" className="btn" role="menuitem" disabled={busy} onClick={() => { setMoreOpen(false); runExport("copy"); }}>
@@ -383,15 +380,6 @@ export default function TierMaker() {
               </div>
             )}
           </div>
-          <button type="button" className="btn hide-sm" disabled={busy} onClick={() => runExport("copy")}>
-            Copy PNG
-          </button>
-          <button type="button" className="btn hide-sm" onClick={() => setKeyOpen(true)} title="Logo source settings">
-            Logos
-          </button>
-          <button type="button" className="btn btn-danger hide-sm" onClick={() => setConfirm({ kind: "reset" })} title="Reset to preset">
-            Reset
-          </button>
         </div>
       </header>
 
