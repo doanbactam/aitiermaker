@@ -64,11 +64,11 @@ export default function TierMaker() {
 
   useEffect(() => {
     if (!moreOpen) return;
-    const onClick = (e: MouseEvent) => {
+    const onPointerDown = (e: PointerEvent) => {
       if (!moreRef.current?.contains(e.target as Node)) setMoreOpen(false);
     };
-    window.addEventListener("mousedown", onClick);
-    return () => window.removeEventListener("mousedown", onClick);
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
   }, [moreOpen]);
 
   const names = useMemo(() => (state ? allItems(state) : {}), [state]);
@@ -335,7 +335,7 @@ export default function TierMaker() {
   return (
     <>
       <header className="site-header">
-        <div className="mx-auto flex max-w-[1100px] flex-nowrap items-center gap-2 overflow-x-auto px-5 py-3">
+        <div className="mx-auto flex max-w-[1100px] items-center gap-2 px-5 py-3">
           <div className="mr-auto flex items-center gap-2.5 text-[15px] font-extrabold tracking-tight">
             <span className="brand-mark" aria-hidden="true" />
             AI TIER MAKER<span className="text-[#c8f04b]">.</span>
