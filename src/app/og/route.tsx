@@ -11,10 +11,20 @@ export async function GET(req: Request) {
 
   return new ImageResponse(
     (
-      <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", background: "#0a0a0b", padding: "40px 44px", fontFamily: "sans-serif" }}>
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          background: "#09090b",
+          padding: "40px 44px",
+          fontFamily: "sans-serif",
+        }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <div style={{ width: 14, height: 14, background: "#c8f04b" }} />
-          <div style={{ fontSize: 44, fontWeight: 800, color: "#f2f2f0", letterSpacing: -1, textTransform: "uppercase" }}>
+          <div style={{ width: 22, height: 22, borderRadius: 6, background: "#c8f04b" }} />
+          <div style={{ fontSize: 44, fontWeight: 800, color: "#f4f4f1", letterSpacing: -1, textTransform: "uppercase" }}>
             {(state.t || "AI Tier List").slice(0, 40)}
           </div>
         </div>

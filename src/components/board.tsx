@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, TouchSensor, closestCorners, pointerWithin, rectIntersection, useSensor, useSensors, useDroppable, MeasuringStrategy } from "@dnd-kit/core";
 import type { CollisionDetection, DragEndEvent, DragOverEvent, DragStartEvent } from "@dnd-kit/core";
-import { SortableContext, arrayMove, rectSortingStrategy, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
+import { SortableContext, rectSortingStrategy, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { useState } from "react";
 import type { CatalogItem, TierState } from "@/lib/types";
 import { Tile, Mark } from "@/components/tile";
 
@@ -33,9 +33,11 @@ function RowLabel({ i, row, onLabel, onColor, onDelete }: { i: number; row: Tier
   };
   return (
     <div className="tlabel" style={{ background: row.c }}>
-      <input type="color" className="swatch" value={row.c} aria-label={`Tier ${row.l} color`} onChange={(e) => onColor(i, e.target.value)} />
+      <input type="color" className="swatch" value={row.c} aria-label={`Color for tier ${row.l}`} onChange={(e) => onColor(i, e.target.value)} />
       <span
         className="ltr"
+        role="textbox"
+        aria-label={`Tier ${i + 1} name`}
         contentEditable="plaintext-only"
         suppressContentEditableWarning
         spellCheck={false}
@@ -56,6 +58,8 @@ function RowLabel({ i, row, onLabel, onColor, onDelete }: { i: number; row: Tier
       </span>
       <span
         className="sub"
+        role="textbox"
+        aria-label={`Tier ${row.l} subtitle`}
         contentEditable="plaintext-only"
         suppressContentEditableWarning
         spellCheck={false}
@@ -64,8 +68,10 @@ function RowLabel({ i, row, onLabel, onColor, onDelete }: { i: number; row: Tier
       >
         {row.sub}
       </span>
-      <span className="cnt">{row.items.length}</span>
-      <button className="del" aria-label="Delete row" onClick={() => onDelete(i)}>
+      <span className="cnt" aria-label={`${row.items.length} items`}>
+        {row.items.length}
+      </span>
+      <button type="button" className="del" aria-label={`Delete tier ${row.l}`} onClick={() => onDelete(i)}>
         ×
       </button>
     </div>
@@ -151,6 +157,8 @@ export function Board(props: BoardProps) {
     />
   );
 
+  const visiblePool = state.pool.filter((id) => !q || (names[id]?.[0] ?? "").toLowerCase().includes(q));
+
   return (
     <DndContext
       sensors={sensors}
@@ -161,9 +169,9 @@ export function Board(props: BoardProps) {
       onDragEnd={handleDragEnd}
       onDragCancel={() => setActiveId(null)}
     >
-      <section className="board flex flex-col gap-2.5">
+      <section className="board flex flex-col gap-2.5" aria-label="Tier rows">
         {state.rows.map((row, i) => (
-          <Row key={`row-${i}`} id={`row-${i}`} rowIndex={i} row={row} onZoneClick={onZoneClick} onRowLabel={onRowLabel} onRowColor={onRowColor} onRowDelete={onRowDelete}>
+          <Row key={`row-${i}`} id={`row-${i}`} rowIndex={i} row={row} empty={row.items.length === 0} onZoneClick={onZoneClick} onRowLabel={onRowLabel} onRowColor={onRowColor} onRowDelete={onRowDelete}>
             <SortableContext items={row.items} strategy={rectSortingStrategy}>
               {row.items.map((id) => renderTile(id))}
             </SortableContext>
@@ -171,16 +179,13 @@ export function Board(props: BoardProps) {
         ))}
       </section>
 
-      <Pool zoneId="pool" onZoneClick={onZoneClick} header={poolHeader} count={poolCount}>
+      <Pool zoneId="pool" onZoneClick={onZoneClick} header={poolHeader} count={poolCount} emptyLabel={state.pool.length === 0 ? "All ranked — add a custom item or reset." : q && visiblePool.length === 0 ? `No matches for “${poolFilter.trim()}”` : undefined}>
         <SortableContext items={state.pool} strategy={rectSortingStrategy}>
           {state.pool.map((id) => renderTile(id, !!q && !(names[id]?.[0] ?? "").toLowerCase().includes(q)))}
         </SortableContext>
       </Pool>
 
-
-      <DragOverlay
-        dropAnimation={{ duration: 180, easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)" }}
-      >
+      <DragOverlay dropAnimation={{ duration: 180, easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)" }}>
         {activeId ? (
           <div className="tile" style={{ cursor: "grabbing", boxShadow: "0 12px 32px rgba(0,0,0,.5)", borderColor: "#c8f04b" }}>
             <Mark mark={factsOf(activeId)?.mark} domain={names[activeId]?.[1] ?? ""} name={names[activeId]?.[0]} />
@@ -192,28 +197,81 @@ export function Board(props: BoardProps) {
   );
 }
 
-function Row({ id, rowIndex, row, children, onZoneClick, onRowLabel, onRowColor, onRowDelete }: { id: ContainerId; rowIndex: number; row: TierState["rows"][number]; children: React.ReactNode; onZoneClick: BoardProps["onZoneClick"]; onRowLabel: BoardProps["onRowLabel"]; onRowColor: BoardProps["onRowColor"]; onRowDelete: BoardProps["onRowDelete"] }) {
+function Row({
+  id,
+  rowIndex,
+  row,
+  empty,
+  children,
+  onZoneClick,
+  onRowLabel,
+  onRowColor,
+  onRowDelete,
+}: {
+  id: ContainerId;
+  rowIndex: number;
+  row: TierState["rows"][number];
+  empty: boolean;
+  children: React.ReactNode;
+  onZoneClick: BoardProps["onZoneClick"];
+  onRowLabel: BoardProps["onRowLabel"];
+  onRowColor: BoardProps["onRowColor"];
+  onRowDelete: BoardProps["onRowDelete"];
+}) {
   const { setNodeRef, isOver } = useDroppable({ id, data: { type: "container" } });
   return (
     <div ref={setNodeRef} className="trow" data-row={rowIndex}>
       <RowLabel i={rowIndex} row={row} onLabel={onRowLabel} onColor={onRowColor} onDelete={onRowDelete} />
-      <div className={`dz${isOver ? " over" : ""}`} data-zone={id} onClick={(e) => { if (!(e.target as HTMLElement).closest(".tile")) onZoneClick(id); }}>
+      <div
+        className={`dz${isOver ? " over" : ""}`}
+        data-zone={id}
+        onClick={(e) => {
+          if (!(e.target as HTMLElement).closest(".tile")) onZoneClick(id);
+        }}
+      >
+        {empty && <span className="place-hint">{isOver ? "Drop" : "Drop items here"}</span>}
         {children}
       </div>
     </div>
   );
 }
 
-function Pool({ zoneId, children, onZoneClick, header, count }: { zoneId: ContainerId; children: React.ReactNode; onZoneClick: BoardProps["onZoneClick"]; header?: React.ReactNode; count?: number }) {
+function Pool({
+  zoneId,
+  children,
+  onZoneClick,
+  header,
+  count,
+  emptyLabel,
+}: {
+  zoneId: ContainerId;
+  children: React.ReactNode;
+  onZoneClick: BoardProps["onZoneClick"];
+  header?: React.ReactNode;
+  count?: number;
+  emptyLabel?: string;
+}) {
   const { setNodeRef, isOver } = useDroppable({ id: zoneId, data: { type: "container" } });
   return (
-    <section className="mt-4 rounded-[10px] border border-[#232329] bg-[#101013] p-3.5">
+    <section className="mt-4 rounded-[10px] border border-[#26262e] bg-[#111114] p-3.5">
       <div className="mb-3 flex flex-wrap items-center gap-2.5">
         <h2 className="font-mono text-[13px] font-bold uppercase tracking-[0.08em] text-[#8b8f98]">Unranked</h2>
-        {typeof count === "number" && <span className="font-mono text-[11px] text-[#55595f]">{count}</span>}
+        {typeof count === "number" && (
+          <span className="rounded-full bg-[#18181d] px-2 py-0.5 font-mono text-[11px] text-[#8b8f98]" aria-label={`${count} unranked items`}>
+            {count}
+          </span>
+        )}
         <div className="ml-auto">{header}</div>
       </div>
-      <div ref={setNodeRef} className={`dz min-h-[70px]!${isOver ? " over" : ""}`} data-zone={zoneId} onClick={(e) => { if (!(e.target as HTMLElement).closest(".tile")) onZoneClick(zoneId); }}>
+      <div
+        ref={setNodeRef}
+        className={`dz min-h-[86px]!${isOver ? " over" : ""}`}
+        data-zone={zoneId}
+        onClick={(e) => {
+          if (!(e.target as HTMLElement).closest(".tile")) onZoneClick(zoneId);
+        }}
+      >
+        {emptyLabel && <span className="place-hint">{emptyLabel}</span>}
         {children}
       </div>
     </section>

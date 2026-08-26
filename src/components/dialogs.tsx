@@ -3,14 +3,26 @@
 import { useState } from "react";
 import { Dialog } from "@base-ui-components/react/dialog";
 
-function Shell({ open, onClose, title, desc, children }: { open: boolean; onClose: () => void; title: string; desc: string; children: React.ReactNode }) {
+function Shell({
+  open,
+  onClose,
+  title,
+  desc,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  desc: string;
+  children: React.ReactNode;
+}) {
   return (
     <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 bg-black/60 backdrop-blur-[3px]" />
-        <Dialog.Popup className="fixed left-1/2 top-1/2 w-[min(420px,92vw)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/10 bg-[#171b25] p-5 text-[#e8ebf2] shadow-2xl shadow-black/60 outline-none">
-          <Dialog.Title className="text-[17px] font-bold">{title}</Dialog.Title>
-          <Dialog.Description className="mt-1 text-[13px] text-[#8b93a7]">{desc}</Dialog.Description>
+        <Dialog.Backdrop className="dialog-backdrop fixed inset-0" />
+        <Dialog.Popup className="dialog-panel">
+          <Dialog.Title className="text-[17px] font-bold tracking-tight">{title}</Dialog.Title>
+          <Dialog.Description className="mt-1 text-[13px] leading-relaxed text-[#8b8f98]">{desc}</Dialog.Description>
           {children}
         </Dialog.Popup>
       </Dialog.Portal>
@@ -18,52 +30,124 @@ function Shell({ open, onClose, title, desc, children }: { open: boolean; onClos
   );
 }
 
-export function AddItemDialog({ open, onClose, onAdd }: { open: boolean; onClose: () => void; onAdd: (name: string, domain: string) => void }) {
+function AddItemForm({ onClose, onAdd }: { onClose: () => void; onAdd: (name: string, domain: string) => void }) {
   const [name, setName] = useState("");
   const [domain, setDomain] = useState("");
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
     onAdd(name.trim(), domain.trim());
-    setName("");
-    setDomain("");
     onClose();
   };
   return (
-    <Shell open={open} onClose={onClose} title="Add custom item" desc="Anything with a website gets a logo.">
-      <form onSubmit={submit}>
-        <label className="mt-3 block text-[11px] font-bold uppercase tracking-[0.06em] text-[#8b93a7]" htmlFor="add-name">Name</label>
-        <input id="add-name" className="mt-1 w-full rounded-[10px] border border-white/10 bg-[#12151d] px-3 py-2 text-sm outline-none focus:border-[#6c8cff]" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Perplexity Pro" required />
-        <label className="mt-3 block text-[11px] font-bold uppercase tracking-[0.06em] text-[#8b93a7]" htmlFor="add-domain">Website / domain</label>
-        <input id="add-domain" className="mt-1 w-full rounded-[10px] border border-white/10 bg-[#12151d] px-3 py-2 text-sm outline-none focus:border-[#6c8cff]" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="e.g. perplexity.ai" />
-        <div className="mt-4 flex justify-end gap-2">
-          <button type="button" className="btn" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn btn-primary">Add</button>
-        </div>
-      </form>
+    <form onSubmit={submit}>
+      <label className="mt-4 block font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-[#8b8f98]" htmlFor="add-name">
+        Name
+      </label>
+      <input id="add-name" className="field mt-1.5 w-full" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Perplexity Pro" required autoFocus />
+      <label className="mt-3 block font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-[#8b8f98]" htmlFor="add-domain">
+        Website / domain
+      </label>
+      <input id="add-domain" className="field mt-1.5 w-full" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="e.g. perplexity.ai" />
+      <div className="mt-5 flex justify-end gap-2">
+        <button type="button" className="btn" onClick={onClose}>
+          Cancel
+        </button>
+        <button type="submit" className="btn btn-primary">
+          Add item
+        </button>
+      </div>
+    </form>
+  );
+}
+
+export function AddItemDialog({ open, onClose, onAdd }: { open: boolean; onClose: () => void; onAdd: (name: string, domain: string) => void }) {
+  return (
+    <Shell open={open} onClose={onClose} title="Add custom item" desc="Anything with a website gets a logo. Leave the domain blank for a letter mark.">
+      {open ? <AddItemForm onClose={onClose} onAdd={onAdd} /> : null}
     </Shell>
   );
 }
 
-export function LogoKeyDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [value, setValue] = useState("");
-  const initial = typeof window !== "undefined" ? localStorage.getItem("aitier.logodev") ?? "" : "";
-  const current = value || initial;
+function LogoKeyForm({ onClose }: { onClose: () => void }) {
+  const [value, setValue] = useState(() => (typeof window === "undefined" ? "" : (localStorage.getItem("aitier.logodev") ?? "")));
+  const [reveal, setReveal] = useState(false);
   const save = (v: string) => {
     if (v) localStorage.setItem("aitier.logodev", v);
     else localStorage.removeItem("aitier.logodev");
     onClose();
   };
   return (
-    <Shell open={open} onClose={onClose} title="Logo source" desc="Paste your free Logo.dev publishable key for crisp brand logos. Without a key, logos fall back to public favicon services.">
-      <label className="mt-3 block text-[11px] font-bold uppercase tracking-[0.06em] text-[#8b93a7]" htmlFor="logo-key">Logo.dev publishable key</label>
-      <input id="logo-key" className="mt-1 w-full rounded-[10px] border border-white/10 bg-[#12151d] px-3 py-2 text-sm outline-none focus:border-[#6c8cff]" value={current} onChange={(e) => setValue(e.target.value)} placeholder="pk_..." />
-      <p className="mt-2 text-[12px] text-[#8b93a7]">
-        Get one at <a href="https://logo.dev" target="_blank" rel="noopener noreferrer" className="text-[#6c8cff] underline">logo.dev</a>
+    <>
+      <label className="mt-4 block font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-[#8b8f98]" htmlFor="logo-key">
+        Logo.dev publishable key
+      </label>
+      <div className="mt-1.5 flex gap-2">
+        <input
+          id="logo-key"
+          className="field w-full font-mono"
+          type={reveal ? "text" : "password"}
+          autoComplete="off"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="pk_..."
+        />
+        <button type="button" className="btn btn-icon" onClick={() => setReveal((v) => !v)} aria-pressed={reveal}>
+          {reveal ? "Hide" : "Show"}
+        </button>
+      </div>
+      <p className="mt-2 text-[12px] text-[#8b8f98]">
+        Get a free key at{" "}
+        <a href="https://logo.dev" target="_blank" rel="noopener noreferrer" className="text-[#c8f04b] underline underline-offset-2">
+          logo.dev
+        </a>
       </p>
-      <div className="mt-4 flex justify-end gap-2">
-        <button className="btn" onClick={() => save("")}>Remove</button>
-        <button className="btn btn-primary" onClick={() => save(current.trim())}>Save</button>
+      <div className="mt-5 flex justify-end gap-2">
+        <button type="button" className="btn" onClick={() => save("")}>
+          Remove
+        </button>
+        <button type="button" className="btn btn-primary" onClick={() => save(value.trim())}>
+          Save
+        </button>
+      </div>
+    </>
+  );
+}
+
+export function LogoKeyDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <Shell open={open} onClose={onClose} title="Logo source" desc="Paste a Logo.dev publishable key for crisp brand logos. Without a key, logos fall back to public favicon services.">
+      {open ? <LogoKeyForm onClose={onClose} /> : null}
+    </Shell>
+  );
+}
+
+export function ConfirmDialog({
+  open,
+  title,
+  desc,
+  confirmLabel,
+  danger,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean;
+  title: string;
+  desc: string;
+  confirmLabel: string;
+  danger?: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Shell open={open} onClose={onCancel} title={title} desc={desc}>
+      <div className="mt-5 flex justify-end gap-2">
+        <button type="button" className="btn" onClick={onCancel}>
+          Cancel
+        </button>
+        <button type="button" className={`btn ${danger ? "btn-danger" : "btn-primary"}`} onClick={onConfirm}>
+          {confirmLabel}
+        </button>
       </div>
     </Shell>
   );
