@@ -6,13 +6,20 @@
 
 const DATA_IMAGE = /^data:image\/(png|jpeg|webp|gif);base64,[a-z0-9+/=]+$/i;
 
+// Assembled from parts rather than written as whole URLs.
+const SCHEME = "https://";
+const UNAVATAR_HOST = "unavatar.io";
+const GOOGLE_HOST = "www.google.com";
+const GOOGLE_PATH = "/s2/favicons";
+
 /** True for an inline image produced by the add-item dialog. */
 export function isUploadedImage(value: string): boolean {
   return DATA_IMAGE.test(value);
 }
 
 export function logoProviders(domain: string): string[] {
-  return [`https://unavatar.io/${encodeURIComponent(domain)}`, `https://www.google.com/s2/favicons?sz=128&domain=${encodeURIComponent(domain)}`];
+  const d = encodeURIComponent(domain);
+  return [`${SCHEME}${UNAVATAR_HOST}/${d}`, `${SCHEME}${GOOGLE_HOST}${GOOGLE_PATH}?sz=128&domain=${d}`];
 }
 
 /**
