@@ -36,6 +36,10 @@ export function Mark({ mark, domain, name, size = 22 }: { mark?: string; domain:
       <img
         src={logoProviders(domain)[0]}
         alt=""
+        width={size - 7}
+        height={size - 7}
+        loading="lazy"
+        decoding="async"
         draggable={false}
         data-step="0"
         data-domain={domain}
@@ -87,7 +91,6 @@ export const Tile = memo(function Tile({ id, name, domain, facts, selected, hidd
       onDoubleClick={() => onSendBack(id)}
       aria-label={name}
       aria-pressed={selected}
-      aria-grabbed={isDragging}
       title={`${name} — drag to rank, click then click a tier, double-click to unrank`}
     >
       {removable && onRemove && (
