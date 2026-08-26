@@ -6,7 +6,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Popover } from "@base-ui-components/react/popover";
 import type { CatalogItem } from "@/lib/types";
 import { MARKS } from "@/data/icons";
-import { logoProviders, fbColor } from "@/lib/logos";
+import { imageSources, fallbackSource, fbColor } from "@/lib/logos";
 import { fmtCtx } from "@/lib/state";
 
 export function Mark({ mark, domain, name, size = 22 }: { mark?: string; domain: string; name?: string; size?: number }) {
@@ -21,38 +21,44 @@ export function Mark({ mark, domain, name, size = 22 }: { mark?: string; domain:
       </span>
     );
   }
-  if (!domain) {
-    const src = name || "?";
+
+  const sources = imageSources(domain);
+  const fbSrc = fallbackSource(name ?? "", domain);
+
+  if (!sources.length) {
     return (
       <span className="mk" style={{ width: size, height: size }}>
-        <span className="fb" style={{ background: fbColor(src) }}>
-          {src[0].toUpperCase()}
+        <span className="fb" style={{ background: fbColor(fbSrc) }}>
+          {fbSrc[0].toUpperCase()}
         </span>
       </span>
     );
   }
+
   return (
     <span className="mk" style={{ width: size, height: size }}>
       <img
-        src={logoProviders(domain)[0]}
+        src={sources[0]}
         alt=""
+        width={size - 7}
+        height={size - 7}
+        loading="lazy"
+        decoding="async"
         draggable={false}
         data-step="0"
-        data-domain={domain}
         onError={(e) => {
           const img = e.currentTarget;
           const step = Number(img.dataset.step) + 1;
-          const list = logoProviders(img.dataset.domain!);
-          if (step < list.length) {
+          if (step < sources.length) {
             img.dataset.step = String(step);
-            img.src = list[step];
-          } else {
-            const fb = document.createElement("span");
-            fb.className = "fb";
-            fb.style.background = fbColor(img.dataset.domain!);
-            fb.textContent = img.dataset.domain![0].toUpperCase();
-            img.replaceWith(fb);
+            img.src = sources[step];
+            return;
           }
+          const fb = document.createElement("span");
+          fb.className = "fb";
+          fb.style.background = fbColor(fbSrc);
+          fb.textContent = fbSrc[0].toUpperCase();
+          img.replaceWith(fb);
         }}
       />
     </span>
@@ -87,7 +93,6 @@ export const Tile = memo(function Tile({ id, name, domain, facts, selected, hidd
       onDoubleClick={() => onSendBack(id)}
       aria-label={name}
       aria-pressed={selected}
-      aria-grabbed={isDragging}
       title={`${name} — drag to rank, click then click a tier, double-click to unrank`}
     >
       {removable && onRemove && (
