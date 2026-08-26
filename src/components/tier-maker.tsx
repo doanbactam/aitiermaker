@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
 import { Board, type ContainerId } from "@/components/board";
+import { Toolbar } from "@/components/toolbar";
+import { SelectionBar } from "@/components/selection-bar";
 import { AddItemDialog, ConfirmDialog } from "@/components/dialogs";
 import { PRESETS } from "@/data/presets";
 import { ITEMS } from "@/data/catalog";
@@ -16,6 +18,8 @@ const HISTORY_LIMIT = 50;
 const COALESCE_MS = 700;
 const TIER_PALETTE = ["#ff6b6b", "#ffa94d", "#ffd43b", "#51cf66", "#74c0fc", "#b197fc", "#f783ac", "#63e6be"];
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+/** Above this, the selection bar shows only a count. */
+const NAME_PREVIEW = 3;
 
 function nextLabel(rows: TierState["rows"]): string {
   const used = new Set(rows.map((r) => r.l.trim().toUpperCase()));
@@ -34,7 +38,6 @@ export default function TierMaker() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [addOpen, setAddOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
   const [quickAdd, setQuickAdd] = useState("");
   const [toast, setToast] = useState("");
   const [busy, setBusy] = useState(false);
@@ -47,7 +50,6 @@ export default function TierMaker() {
   const stateRef = useRef<TierState | null>(null);
   const selRef = useRef<string[]>([]);
   const searchRef = useRef<HTMLInputElement>(null);
-  const moreRef = useRef<HTMLDivElement>(null);
   const pastRef = useRef<TierState[]>([]);
   const futureRef = useRef<TierState[]>([]);
   const lastSnapRef = useRef<{ tag: string; at: number } | null>(null);
@@ -65,15 +67,6 @@ export default function TierMaker() {
   useEffect(() => {
     if (state) localStorage.setItem(LS_STATE, JSON.stringify(state));
   }, [state]);
-
-  useEffect(() => {
-    if (!moreOpen) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (!moreRef.current?.contains(e.target as Node)) setMoreOpen(false);
-    };
-    window.addEventListener("pointerdown", onPointerDown);
-    return () => window.removeEventListener("pointerdown", onPointerDown);
-  }, [moreOpen]);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -184,7 +177,7 @@ export default function TierMaker() {
       const moving = Array.from(new Set(ids)).filter((id) => present.has(id));
       if (!moving.length) return s;
       const movingSet = new Set(moving);
-      let pool = s.pool.filter((id) => !movingSet.has(id));
+      const pool = s.pool.filter((id) => !movingSet.has(id));
       const rows = s.rows.map((r) => ({ ...r, items: r.items.filter((id) => !movingSet.has(id)) }));
       if (to === "pool") {
         const idx = beforeId && !movingSet.has(beforeId) ? pool.indexOf(beforeId) : -1;
@@ -215,14 +208,14 @@ export default function TierMaker() {
   }, [snap]);
 
   const handleSelect = useCallback((id: string) => {
-    setSelectedIds((cur) => cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
+    setSelectedIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
   }, []);
 
   const selectMany = useCallback((ids: string[]) => {
     setSelectedIds((cur) => Array.from(new Set([...cur, ...ids])));
   }, []);
 
-  const handleZoneClick = useCallback((cont: ContainerId, beforeId?: string) => {
+  const placeSelection = useCallback((cont: ContainerId, beforeId?: string) => {
     const ids = selRef.current;
     if (!ids.length) return;
     moveItems(ids, cont, beforeId);
@@ -302,7 +295,6 @@ export default function TierMaker() {
       }
       if (e.key === "Escape") {
         setSelectedIds([]);
-        setMoreOpen(false);
         setAddOpen(false);
         setConfirm(null);
         return;
@@ -336,8 +328,19 @@ export default function TierMaker() {
   if (!state) {
     return (
       <>
-        <header className="site-header"><div className="mx-auto flex max-w-[1200px] items-center gap-3 px-4 py-3"><span className="brand-mark" aria-hidden="true" /><span className="font-mono text-[13px] font-bold tracking-[0.08em]">AI TIER MAKER.</span></div></header>
-        <main className="mx-auto max-w-[1200px] px-4 py-6"><div className="flex flex-col gap-2.5" aria-busy="true" aria-label="Loading board">{Array.from({ length: 6 }, (_, i) => <div key={i} className="skeleton h-[68px]" />)}</div></main>
+        <header className="site-header">
+          <div className="mx-auto flex max-w-[1200px] items-center gap-3 px-4 py-3">
+            <span className="brand-mark" aria-hidden="true" />
+            <span className="font-mono text-[13px] font-bold tracking-[0.08em]">AI TIER MAKER.</span>
+          </div>
+        </header>
+        <main className="mx-auto max-w-[1200px] px-4 py-6">
+          <div className="flex flex-col gap-2.5" aria-busy="true" aria-label="Loading board">
+            {Array.from({ length: 6 }, (_, i) => (
+              <div key={i} className="skeleton h-[68px]" />
+            ))}
+          </div>
+        </main>
       </>
     );
   }
@@ -488,7 +491,11 @@ export default function TierMaker() {
     return { title: `Delete tier “${row?.l ?? ""}”?`, desc: `${row?.items.length ?? 0} items will move back to Unranked.`, label: "Delete tier", danger: true };
   })();
 
-  const selectedNames = selectedIds.map((id) => names[id]?.[0] ?? id);
+  const rankedCount = state.rows.reduce((a, r) => a + r.items.length, 0);
+  const totalCount = rankedCount + state.pool.length;
+  const pct = totalCount ? Math.round((rankedCount / totalCount) * 100) : 0;
+  const previewNames = selectedIds.length <= NAME_PREVIEW ? selectedIds.map((id) => names[id]?.[0] ?? id) : [];
+
   const onHandleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value;
     const handle = v ? (v.startsWith("@") ? v : "@" + v.replace(/^@+/, "")) : "";
@@ -497,69 +504,145 @@ export default function TierMaker() {
 
   return (
     <>
-      <a className="skip-link" href="#board">Skip to board</a>
+      <a className="skip-link" href="#board">
+        Skip to board
+      </a>
+
       <header className="site-header">
-        <div className="mx-auto flex max-w-[1200px] flex-wrap items-center gap-2 px-4 py-3">
-          <span className="brand-mark" aria-hidden="true" />
-          <span className="font-mono text-[13px] font-bold tracking-[0.08em]">AI TIER MAKER.</span>
-          <select className="btn ml-2" value={state.p} onChange={(e) => switchPreset(e.target.value)} aria-label="Choose preset">
-            {PRESETS.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
-          </select>
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <button type="button" className="btn btn-icon" onClick={undo} disabled={!canUndo} aria-label="Undo" title="Undo (Ctrl+Z)">↶</button>
-            <button type="button" className="btn btn-icon" onClick={redo} disabled={!canRedo} aria-label="Redo" title="Redo (Ctrl+Shift+Z)">↷</button>
-            <button type="button" className="btn" onClick={() => addRow("bottom")}>+ Tier</button>
-            <button type="button" className="btn" onClick={() => setAddOpen(true)}>+ Item</button>
-            <button type="button" className="btn btn-primary" onClick={share}>Share</button>
-            <div className="relative" ref={moreRef}>
-              <button type="button" className="btn" aria-expanded={moreOpen} aria-haspopup="true" onClick={() => setMoreOpen((v) => !v)}>More</button>
-              {moreOpen && (
-                <div className="more-menu" role="menu">
-                  <button type="button" className="btn" role="menuitem" disabled={busy} onClick={() => { setMoreOpen(false); runExport("download"); }}>Download PNG</button>
-                  <button type="button" className="btn" role="menuitem" disabled={busy} onClick={() => { setMoreOpen(false); runExport("copy"); }}>Copy PNG</button>
-                  <button type="button" className="btn" role="menuitem" onClick={() => { setMoreOpen(false); postX(); }}>Post on X</button>
-                  <button type="button" className="btn" role="menuitem" onClick={() => { setMoreOpen(false); addRow("top"); }}>+ Tier on top</button>
-                  <button type="button" className="btn" role="menuitem" onClick={() => { setMoreOpen(false); dealUnranked(); }}>Deal unranked</button>
-                  <button type="button" className="btn btn-danger" role="menuitem" onClick={() => { setMoreOpen(false); setConfirm({ kind: "reset" }); }}>Reset</button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <Toolbar
+          presetId={state.p}
+          presets={PRESETS}
+          onPreset={switchPreset}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onUndo={undo}
+          onRedo={redo}
+          onAddTier={addRow}
+          onAddItem={() => setAddOpen(true)}
+          onShare={share}
+          onExport={runExport}
+          onPostX={postX}
+          onDeal={dealUnranked}
+          onReset={() => setConfirm({ kind: "reset" })}
+          busy={busy}
+        />
       </header>
 
       <main id="board" className="mx-auto max-w-[1200px] px-4 py-6">
-        {remixable && <div className="sel-banner"><span>Viewing {state.by.handle || state.by.name || "someone"}&apos;s tier list</span><button type="button" className="btn ml-auto" onClick={remix}>Remix this</button></div>}
-        <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.1em] text-[#8b8f98]">{preset.desc}</p>
-        <h1 className="mt-1 text-[28px] font-bold tracking-tight outline-none" role="textbox" aria-label="List title" contentEditable="plaintext-only" suppressContentEditableWarning spellCheck={false} onBlur={(e) => { const t = e.currentTarget.textContent?.trim() || "Untitled"; mutate((s) => ({ ...s, t }), "title"); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } }}>{state.t}</h1>
-
-        {selectedIds.length > 0 && (
-          <div className="sel-banner" role="status">
-            <span><b>{selectedIds.length}</b> selected{selectedIds.length <= 3 ? `: ${selectedNames.join(", ")}` : ""} — click a tier or Unranked to move all.</span>
-            <button type="button" className="btn ml-auto" onClick={() => setSelectedIds([])}>Clear</button>
+        {remixable && (
+          <div className="sel-banner">
+            <span>Viewing {state.by.handle || state.by.name || "someone"}&apos;s tier list</span>
+            <button type="button" className="btn ml-auto" onClick={remix}>
+              Remix this
+            </button>
           </div>
         )}
 
+        <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.1em] text-[#8b8f98]">{preset.desc}</p>
+        <h1
+          className="mt-1 text-[28px] font-bold tracking-tight outline-none"
+          role="textbox"
+          aria-label="List title"
+          contentEditable="plaintext-only"
+          suppressContentEditableWarning
+          spellCheck={false}
+          onBlur={(e) => {
+            const t = e.currentTarget.textContent?.trim() || "Untitled";
+            mutate((s) => ({ ...s, t }), "title");
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              e.currentTarget.blur();
+            }
+          }}
+        >
+          {state.t}
+        </h1>
+
+        <div className="mt-2.5 flex items-center gap-2.5">
+          <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Ranked progress">
+            <span style={{ width: `${pct}%` }} />
+          </div>
+          <span className="shrink-0 font-mono text-[11px] text-[#8b8f98]">
+            {rankedCount}/{totalCount} ranked
+          </span>
+        </div>
+
+        {selectedIds.length > 0 && <SelectionBar count={selectedIds.length} names={previewNames} rows={state.rows} onPlace={placeSelection} onClear={() => setSelectedIds([])} />}
+
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          <input className="field" placeholder="Your name" aria-label="Your name" value={state.by.name} onChange={(e) => { const name = e.target.value; mutate((s) => ({ ...s, by: { ...s.by, name } }), "by-name"); }} />
+          <input
+            className="field"
+            placeholder="Your name"
+            aria-label="Your name"
+            value={state.by.name}
+            onChange={(e) => {
+              const name = e.target.value;
+              mutate((s) => ({ ...s, by: { ...s.by, name } }), "by-name");
+            }}
+          />
           <input className="field" placeholder="@handle" aria-label="Your handle" value={state.by.handle} onChange={onHandleInput} />
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <input ref={searchRef} className="field" placeholder="Filter items  /" aria-label="Filter unranked items" value={query} onChange={(e) => setQuery(e.target.value)} />
-          <input className="field" placeholder="Quick add, then Enter" aria-label="Quick add an item" value={quickAdd} onChange={(e) => setQuickAdd(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { const v = e.currentTarget.value.trim(); if (v) { addQuick(v); setQuickAdd(""); } } }} />
+          <input
+            className="field"
+            placeholder="Quick add, then Enter"
+            aria-label="Quick add an item"
+            value={quickAdd}
+            onChange={(e) => setQuickAdd(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                const v = e.currentTarget.value.trim();
+                if (v) {
+                  addQuick(v);
+                  setQuickAdd("");
+                }
+              }
+            }}
+          />
         </div>
 
         <div className="mt-5">
-          <Board state={state} names={names} factsOf={factsOf} selectedIds={selectedIds} poolFilter={query} catFilter={catFilter} onCatFilter={setCatFilter} onMove={moveItem} onReorder={reorder} onSelect={handleSelect} onSelectMany={selectMany} onZoneClick={handleZoneClick} onSendBack={sendBack} onRowLabel={onRowLabel} onRowColor={onRowColor} onRowDelete={deleteRow} onRowMove={moveRow} onRemove={removeFromBoard} />
+          <Board
+            state={state}
+            names={names}
+            factsOf={factsOf}
+            selectedIds={selectedIds}
+            poolFilter={query}
+            catFilter={catFilter}
+            onCatFilter={setCatFilter}
+            onMove={moveItem}
+            onReorder={reorder}
+            onSelect={handleSelect}
+            onSelectMany={selectMany}
+            onZoneClick={placeSelection}
+            onSendBack={sendBack}
+            onRowLabel={onRowLabel}
+            onRowColor={onRowColor}
+            onRowDelete={deleteRow}
+            onRowMove={moveRow}
+            onRemove={removeFromBoard}
+          />
         </div>
 
-        <p className="mt-5 font-mono text-[11px] text-[#5c6068]">Click items to select · click a tier to move selection · drag or double-click for one item<span className="hide-sm"> · Filter <span className="kbd">/</span> · Clear <span className="kbd">Esc</span> · Unrank selected <span className="kbd">Del</span> · Undo <span className="kbd">Ctrl</span> <span className="kbd">Z</span> · Redo <span className="kbd">Ctrl</span> <span className="kbd">⇧</span> <span className="kbd">Z</span></span></p>
+        <p className="mt-5 font-mono text-[11px] text-[#5c6068]">
+          Click items to select · place with the tier chips · drag or double-click for one item
+          <span className="hide-sm">
+            {" "}· Filter <span className="kbd">/</span> · Clear <span className="kbd">Esc</span> · Unrank selected <span className="kbd">Del</span> · Undo <span className="kbd">Ctrl</span>{" "}
+            <span className="kbd">Z</span> · Redo <span className="kbd">Ctrl</span> <span className="kbd">⇧</span> <span className="kbd">Z</span>
+          </span>
+        </p>
       </main>
 
       <AddItemDialog open={addOpen} onClose={() => setAddOpen(false)} onAdd={addCustom} />
       <ConfirmDialog open={!!confirm} title={confirmCopy.title} desc={confirmCopy.desc} confirmLabel={confirmCopy.label} danger={confirmCopy.danger} onCancel={() => setConfirm(null)} onConfirm={runConfirm} />
-      <div className={`toast${toast ? " on" : ""}`} role="status" aria-live="polite">{toast}</div>
+
+      <div className={`toast${toast ? " on" : ""}`} role="status" aria-live="polite">
+        {toast}
+      </div>
     </>
   );
 }

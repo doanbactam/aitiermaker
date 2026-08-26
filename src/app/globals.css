@@ -147,10 +147,24 @@ body {
   min-width: 36px;
 }
 
+/* Undo / redo read as one control rather than two unrelated buttons. */
+.btn-group {
+  display: inline-flex;
+}
+.btn-group .btn:not(:last-child) {
+  border-right-width: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.btn-group .btn:not(:first-child) {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
 select.btn {
   appearance: none;
   padding-right: 28px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238b8f98' stroke-width='1.6' fill='none'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http%3A//www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238b8f98' stroke-width='1.6' fill='none'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
   max-width: 220px;
@@ -189,6 +203,21 @@ select.btn {
   font-size: 10px;
   font-weight: 700;
   color: var(--color-mut);
+}
+
+.progress {
+  flex: 1;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--color-panel2);
+  overflow: hidden;
+}
+.progress span {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--color-lime);
+  transition: width 0.25s ease-out;
 }
 
 .tile {
@@ -465,6 +494,47 @@ select.btn {
   color: #0a0a0b;
 }
 
+/* One-click destinations for the current selection. */
+.place-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.place-chip {
+  display: grid;
+  place-items: center;
+  min-width: 34px;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid rgba(0, 0, 0, 0.28);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(0, 0, 0, 0.82);
+  cursor: pointer;
+  transition: transform 0.1s ease-out, filter 0.15s;
+}
+.place-chip:hover {
+  filter: brightness(1.12);
+}
+.place-chip:active {
+  transform: scale(0.94);
+}
+.place-chip.ghost {
+  background: transparent;
+  border-color: var(--color-line2);
+  color: var(--color-mut);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.place-chip.ghost:hover {
+  color: var(--color-fg);
+  filter: none;
+}
+
 .factspop {
   width: 268px;
   border-radius: var(--radius-md);
@@ -543,6 +613,17 @@ select.btn {
   font-size: 13px;
 }
 
+/* Keeps the placement chips reachable while scrolling the pool. */
+.sel-sticky {
+  position: sticky;
+  top: 58px;
+  z-index: 30;
+  align-items: flex-start;
+  background: color-mix(in srgb, var(--color-lime) 8%, var(--color-panel));
+  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+}
+
 .skeleton {
   animation: pulse 1.2s ease-in-out infinite;
   background: linear-gradient(90deg, var(--color-panel) 0%, var(--color-panel2) 50%, var(--color-panel) 100%);
@@ -576,6 +657,12 @@ select.btn {
 .more-menu .btn {
   width: 100%;
   justify-content: flex-start;
+}
+.menu-sep {
+  display: block;
+  height: 1px;
+  margin: 2px 0;
+  background: var(--color-line);
 }
 
 .blank-page {
@@ -621,5 +708,12 @@ select.btn {
   }
   select.btn {
     max-width: 140px;
+  }
+  .sel-sticky {
+    top: 52px;
+  }
+  .place-chip {
+    min-width: 38px;
+    height: 34px;
   }
 }
