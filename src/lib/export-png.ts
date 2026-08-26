@@ -167,6 +167,8 @@ function toCanvas(state: TierState, names: Record<string, [string, string]>, mar
 
     x.fillStyle = MUT;
     x.font = "600 12px monospace";
+    x.textAlign = "left";
+    x.fillText(`RANK YOURS → ${location.host}`, PAD, H - 24);
     x.textAlign = "right";
     x.fillText("AITIERMAKER", W - PAD, H - 24);
     x.textAlign = "left";

@@ -69,59 +69,6 @@ export function AddItemDialog({ open, onClose, onAdd }: { open: boolean; onClose
   );
 }
 
-function LogoKeyForm({ onClose }: { onClose: () => void }) {
-  const [value, setValue] = useState(() => (typeof window === "undefined" ? "" : (localStorage.getItem("aitier.logodev") ?? "")));
-  const [reveal, setReveal] = useState(false);
-  const save = (v: string) => {
-    if (v) localStorage.setItem("aitier.logodev", v);
-    else localStorage.removeItem("aitier.logodev");
-    onClose();
-  };
-  return (
-    <>
-      <label className="mt-4 block font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-[#8b8f98]" htmlFor="logo-key">
-        Logo.dev publishable key
-      </label>
-      <div className="mt-1.5 flex gap-2">
-        <input
-          id="logo-key"
-          className="field w-full font-mono"
-          type={reveal ? "text" : "password"}
-          autoComplete="off"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder="pk_..."
-        />
-        <button type="button" className="btn btn-icon" onClick={() => setReveal((v) => !v)} aria-pressed={reveal}>
-          {reveal ? "Hide" : "Show"}
-        </button>
-      </div>
-      <p className="mt-2 text-[12px] text-[#8b8f98]">
-        Get a free key at{" "}
-        <a href="https://logo.dev" target="_blank" rel="noopener noreferrer" className="text-[#c8f04b] underline underline-offset-2">
-          logo.dev
-        </a>
-      </p>
-      <div className="mt-5 flex justify-end gap-2">
-        <button type="button" className="btn" onClick={() => save("")}>
-          Remove
-        </button>
-        <button type="button" className="btn btn-primary" onClick={() => save(value.trim())}>
-          Save
-        </button>
-      </div>
-    </>
-  );
-}
-
-export function LogoKeyDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  return (
-    <Shell open={open} onClose={onClose} title="Logo source" desc="Paste a Logo.dev publishable key for crisp brand logos. Without a key, logos fall back to public favicon services.">
-      {open ? <LogoKeyForm onClose={onClose} /> : null}
-    </Shell>
-  );
-}
-
 export function ConfirmDialog({
   open,
   title,

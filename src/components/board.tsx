@@ -5,9 +5,22 @@ import type { CollisionDetection, DragEndEvent, DragOverEvent, DragStartEvent } 
 import { SortableContext, rectSortingStrategy, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { useState } from "react";
 import type { CatalogItem, TierState } from "@/lib/types";
+import type { Category } from "@/lib/types";
+import { ITEMS } from "@/data/catalog";
 import { Tile, Mark } from "@/components/tile";
 
 export type ContainerId = string;
+
+export const CAT_FILTERS: readonly [Category | "all", string][] = [
+  ["all", "All"],
+  ["chat", "Chat"],
+  ["coding", "Coding"],
+  ["image", "Image"],
+  ["video", "Video"],
+  ["audio", "Audio"],
+  ["local", "Local"],
+  ["infra", "Infra"],
+];
 
 interface BoardProps {
   state: TierState;
@@ -15,19 +28,22 @@ interface BoardProps {
   factsOf: (id: string) => CatalogItem | undefined;
   selectedId: string | null;
   poolFilter: string;
+  catFilter: string;
+  onCatFilter: (c: string) => void;
   poolHeader?: React.ReactNode;
-  poolCount?: number;
   onMove: (id: string, toContainer: ContainerId, beforeId?: string) => void;
   onReorder: (container: ContainerId, from: number, to: number) => void;
   onSelect: (id: string) => void;
   onZoneClick: (container: ContainerId, beforeId?: string) => void;
   onSendBack: (id: string) => void;
+  onRemove: (id: string) => void;
   onRowLabel: (i: number, field: "l" | "sub", value: string) => void;
   onRowColor: (i: number, color: string) => void;
   onRowDelete: (i: number) => void;
+  onRowMove: (i: number, dir: -1 | 1) => void;
 }
 
-function RowLabel({ i, row, onLabel, onColor, onDelete }: { i: number; row: TierState["rows"][number]; onLabel: BoardProps["onRowLabel"]; onColor: BoardProps["onRowColor"]; onDelete: BoardProps["onRowDelete"] }) {
+function RowLabel({ i, total, row, onLabel, onColor, onDelete, onMoveRow }: { i: number; total: number; row: TierState["rows"][number]; onLabel: BoardProps["onRowLabel"]; onColor: BoardProps["onRowColor"]; onDelete: BoardProps["onRowDelete"]; onMoveRow: BoardProps["onRowMove"] }) {
   const shrink = (e: React.FormEvent<HTMLSpanElement>) => {
     e.currentTarget.classList.toggle("long", (e.currentTarget.textContent?.length ?? 0) > 2);
   };
@@ -71,6 +87,14 @@ function RowLabel({ i, row, onLabel, onColor, onDelete }: { i: number; row: Tier
       <span className="cnt" aria-label={`${row.items.length} items`}>
         {row.items.length}
       </span>
+      <div className="mvs">
+        <button type="button" className="mv" aria-label={`Move tier ${row.l} up`} disabled={i === 0} onClick={() => onMoveRow(i, -1)}>
+          ↑
+        </button>
+        <button type="button" className="mv" aria-label={`Move tier ${row.l} down`} disabled={i === total - 1} onClick={() => onMoveRow(i, 1)}>
+          ↓
+        </button>
+      </div>
       <button type="button" className="del" aria-label={`Delete tier ${row.l}`} onClick={() => onDelete(i)}>
         ×
       </button>
@@ -79,7 +103,7 @@ function RowLabel({ i, row, onLabel, onColor, onDelete }: { i: number; row: Tier
 }
 
 export function Board(props: BoardProps) {
-  const { state, names, factsOf, selectedId, poolFilter, poolHeader, poolCount, onMove, onReorder, onSelect, onZoneClick, onSendBack, onRowLabel, onRowColor, onRowDelete } = props;
+  const { state, names, factsOf, selectedId, poolFilter, catFilter, onCatFilter, poolHeader, onMove, onReorder, onSelect, onZoneClick, onSendBack, onRemove, onRowLabel, onRowColor, onRowDelete, onRowMove } = props;
   const q = poolFilter.trim().toLowerCase();
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -143,7 +167,7 @@ export function Board(props: BoardProps) {
     if (from !== to) onReorder(cont, from, to);
   };
 
-  const renderTile = (id: string, hidden?: boolean) => (
+  const renderTile = (id: string, hidden?: boolean, removable?: boolean) => (
     <Tile
       key={id}
       id={id}
@@ -152,12 +176,19 @@ export function Board(props: BoardProps) {
       facts={factsOf(id)}
       selected={selectedId === id}
       hidden={hidden}
+      removable={removable}
       onClick={onSelect}
       onSendBack={onSendBack}
+      onRemove={onRemove}
     />
   );
 
-  const visiblePool = state.pool.filter((id) => !q || (names[id]?.[0] ?? "").toLowerCase().includes(q));
+  const matchesFilter = (id: string) => {
+    const okQ = !q || (names[id]?.[0] ?? "").toLowerCase().includes(q);
+    const okC = catFilter === "all" || ITEMS[id]?.cat === catFilter;
+    return okQ && okC;
+  };
+  const visiblePool = state.pool.filter(matchesFilter);
 
   return (
     <DndContext
@@ -171,7 +202,7 @@ export function Board(props: BoardProps) {
     >
       <section className="board flex flex-col gap-2.5" aria-label="Tier rows">
         {state.rows.map((row, i) => (
-          <Row key={`row-${i}`} id={`row-${i}`} rowIndex={i} row={row} empty={row.items.length === 0} onZoneClick={onZoneClick} onRowLabel={onRowLabel} onRowColor={onRowColor} onRowDelete={onRowDelete}>
+          <Row key={`row-${i}`} id={`row-${i}`} rowIndex={i} row={row} empty={row.items.length === 0} rowsTotal={state.rows.length} onZoneClick={onZoneClick} onRowLabel={onRowLabel} onRowColor={onRowColor} onRowDelete={onRowDelete} onRowMove={onRowMove}>
             <SortableContext items={row.items} strategy={rectSortingStrategy}>
               {row.items.map((id) => renderTile(id))}
             </SortableContext>
@@ -179,9 +210,33 @@ export function Board(props: BoardProps) {
         ))}
       </section>
 
-      <Pool zoneId="pool" onZoneClick={onZoneClick} header={poolHeader} count={poolCount} emptyLabel={state.pool.length === 0 ? "All ranked — add a custom item or reset." : q && visiblePool.length === 0 ? `No matches for “${poolFilter.trim()}”` : undefined}>
+      <Pool
+        zoneId="pool"
+        onZoneClick={onZoneClick}
+        header={poolHeader}
+        toolbar={
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by category">
+            {CAT_FILTERS.map(([c, label]) => (
+              <button key={c} type="button" className={`chip${catFilter === c ? " on" : ""}`} aria-pressed={catFilter === c} onClick={() => onCatFilter(c)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        }
+        emptyLabel={
+          state.pool.length === 0
+            ? state.p === "blank"
+              ? "Type a name above to add your first item."
+              : "All ranked — add a custom item or reset."
+            : visiblePool.length === 0
+              ? `No matches${catFilter !== "all" ? ` in ${catFilter}` : ""} for “${poolFilter.trim()}”`
+              : undefined
+        }
+        shown={visiblePool.length}
+        total={state.pool.length}
+      >
         <SortableContext items={state.pool} strategy={rectSortingStrategy}>
-          {state.pool.map((id) => renderTile(id, !!q && !(names[id]?.[0] ?? "").toLowerCase().includes(q)))}
+          {state.pool.map((id) => renderTile(id, !matchesFilter(id), true))}
         </SortableContext>
       </Pool>
 
@@ -201,27 +256,31 @@ function Row({
   id,
   rowIndex,
   row,
+  rowsTotal,
   empty,
   children,
   onZoneClick,
   onRowLabel,
   onRowColor,
   onRowDelete,
+  onRowMove,
 }: {
   id: ContainerId;
   rowIndex: number;
   row: TierState["rows"][number];
+  rowsTotal: number;
   empty: boolean;
   children: React.ReactNode;
   onZoneClick: BoardProps["onZoneClick"];
   onRowLabel: BoardProps["onRowLabel"];
   onRowColor: BoardProps["onRowColor"];
   onRowDelete: BoardProps["onRowDelete"];
+  onRowMove: BoardProps["onRowMove"];
 }) {
   const { setNodeRef, isOver } = useDroppable({ id, data: { type: "container" } });
   return (
     <div ref={setNodeRef} className="trow" data-row={rowIndex}>
-      <RowLabel i={rowIndex} row={row} onLabel={onRowLabel} onColor={onRowColor} onDelete={onRowDelete} />
+      <RowLabel i={rowIndex} total={rowsTotal} row={row} onLabel={onRowLabel} onColor={onRowColor} onDelete={onRowDelete} onMoveRow={onRowMove} />
       <div
         className={`dz${isOver ? " over" : ""}`}
         data-zone={id}
@@ -241,28 +300,32 @@ function Pool({
   children,
   onZoneClick,
   header,
-  count,
+  toolbar,
   emptyLabel,
+  shown,
+  total,
 }: {
   zoneId: ContainerId;
   children: React.ReactNode;
   onZoneClick: BoardProps["onZoneClick"];
   header?: React.ReactNode;
-  count?: number;
+  toolbar?: React.ReactNode;
   emptyLabel?: string;
+  shown: number;
+  total: number;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: zoneId, data: { type: "container" } });
   return (
     <section className="mt-4 rounded-[10px] border border-[#26262e] bg-[#111114] p-3.5">
       <div className="mb-3 flex flex-wrap items-center gap-2.5">
         <h2 className="font-mono text-[13px] font-bold uppercase tracking-[0.08em] text-[#8b8f98]">Unranked</h2>
-        {typeof count === "number" && (
-          <span className="rounded-full bg-[#18181d] px-2 py-0.5 font-mono text-[11px] text-[#8b8f98]" aria-label={`${count} unranked items`}>
-            {count}
-          </span>
-        )}
+        <span className="rounded-full bg-[#18181d] px-2 py-0.5 font-mono text-[11px] text-[#8b8f98]" aria-label={`${shown} unranked items shown`}>
+          {shown}
+          {shown !== total ? ` / ${total}` : ""}
+        </span>
         <div className="ml-auto">{header}</div>
       </div>
+      {toolbar}
       <div
         ref={setNodeRef}
         className={`dz min-h-[86px]!${isOver ? " over" : ""}`}

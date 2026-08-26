@@ -1,4 +1,5 @@
 import type { Preset, TierRow } from "@/lib/types";
+import { ITEMS } from "@/data/catalog";
 
 export const DEFAULT_ROWS: TierRow[] = [
   { l: "S", sub: "Goated", c: "#ff6b6b", items: [] },
@@ -44,5 +45,19 @@ export const PRESETS: Preset[] = [
     desc: "Run AI on your own hardware",
     items: ["ollama", "lmstudio", "openwebui", "jan", "comfyui", "vllm", "llamacpp", "hf"],
     seed: { S: ["ollama"], A: ["lmstudio"], B: ["comfyui"] },
+  },
+  {
+    id: "all",
+    title: "All AI Tools",
+    desc: "Every category in one board",
+    items: Object.keys(ITEMS),
+    seed: {},
+  },
+  {
+    id: "blank",
+    title: "Blank Board",
+    desc: "Start empty — add your own items",
+    items: [],
+    seed: {},
   },
 ];

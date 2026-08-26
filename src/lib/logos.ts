@@ -1,14 +1,5 @@
-const LS_KEY = "aitier.logodev";
-
 export function logoProviders(domain: string): string[] {
-  let key: string | null = null;
-  try {
-    key = localStorage.getItem(LS_KEY);
-  } catch {}
-  const list: string[] = [];
-  if (key) list.push(`https://img.logo.dev/${domain}?token=${encodeURIComponent(key)}&size=144&format=png`);
-  list.push(`https://unavatar.io/${domain}`, `https://www.google.com/s2/favicons?sz=128&domain=${domain}`);
-  return list;
+  return [`https://unavatar.io/${domain}`, `https://www.google.com/s2/favicons?sz=128&domain=${domain}`];
 }
 
 export function fbColor(s: string): string {

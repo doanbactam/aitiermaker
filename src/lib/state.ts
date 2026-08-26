@@ -3,7 +3,6 @@ import { ITEMS } from "@/data/catalog";
 import type { TierState } from "@/lib/types";
 
 export const LS_STATE = "aitier.state";
-export const LS_KEY = "aitier.logodev";
 
 export function b64e(s: string): string {
   return btoa(unescape(encodeURIComponent(s))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -38,6 +37,7 @@ function asState(value: unknown): TierState | null {
       name: s.by?.name ?? "",
       handle: s.by?.handle ?? "",
     },
+    src: typeof s.src === "string" && s.src ? s.src : undefined,
   };
 }
 

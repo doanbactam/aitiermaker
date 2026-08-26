@@ -29,6 +29,8 @@ export interface TierState {
   pool: string[];
   customs: Record<string, [string, string]>;
   by: { name: string; handle: string };
+  /** handle/name of the creator whose shared list this was remixed from */
+  src?: string;
 }
 
 export interface Preset {

@@ -66,11 +66,13 @@ interface TileProps {
   facts?: CatalogItem;
   selected: boolean;
   hidden?: boolean;
+  removable?: boolean;
   onClick: (id: string) => void;
   onSendBack: (id: string) => void;
+  onRemove?: (id: string) => void;
 }
 
-export const Tile = memo(function Tile({ id, name, domain, facts, selected, hidden, onClick, onSendBack }: TileProps) {
+export const Tile = memo(function Tile({ id, name, domain, facts, selected, hidden, removable, onClick, onSendBack, onRemove }: TileProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, data: { type: "item" } });
 
   return (
@@ -88,6 +90,20 @@ export const Tile = memo(function Tile({ id, name, domain, facts, selected, hidd
       aria-grabbed={isDragging}
       title={`${name} — drag to rank, click then click a tier, double-click to unrank`}
     >
+      {removable && onRemove && (
+        <button
+          type="button"
+          className="info-btn absolute -top-1.5 -left-1.5 h-4 w-4 rounded-full border border-[#3a3a42] bg-[#26262c] font-mono text-[9px] font-bold text-[#a0a4ac] opacity-0 transition-opacity [div.tile:hover_&]:opacity-100 focus:opacity-100 cursor-pointer leading-none"
+          aria-label={`Remove ${name} from board`}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove(id);
+          }}
+        >
+          ×
+        </button>
+      )}
       <Mark mark={facts?.mark} domain={domain} name={name} />
       <span className="nm">{name}</span>
       <svg className="grip" viewBox="0 0 24 24" width={12} height={12} aria-hidden="true" fill="currentColor">
