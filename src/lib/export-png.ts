@@ -1,7 +1,7 @@
 import type { TierState } from "@/lib/types";
 import { ITEMS } from "@/data/catalog";
 import { MARKS } from "@/data/icons";
-import { logoProviders, fbColor } from "@/lib/logos";
+import { imageSources, fallbackSource, fbColor } from "@/lib/logos";
 
 const BG = "#0a0a0b", CHIP = "#17171c", LINE = "#232329", FG = "#f2f2f0", MUT = "#8b8f98";
 
@@ -15,9 +15,17 @@ function rr(x: CanvasRenderingContext2D, a: number, b: number, w: number, h: num
   x.closePath();
 }
 
-function loadImage(domain: string): Promise<HTMLImageElement | null> {
+/**
+ * Resolve a mark source to an image. Handles both uploaded data URLs (single
+ * candidate, no network) and domains (favicon provider chain).
+ */
+function loadImage(value: string): Promise<HTMLImageElement | null> {
   return new Promise((res) => {
-    const list = logoProviders(domain);
+    const list = imageSources(value);
+    if (!list.length) {
+      res(null);
+      return;
+    }
     let i = 0;
     const img = new Image();
     img.crossOrigin = "anonymous";
@@ -145,7 +153,7 @@ function toCanvas(state: TierState, names: Record<string, [string, string]>, mar
             else dw = 15 * ar;
             x.drawImage(im, mx + (22 - dw) / 2, my + (22 - dh) / 2, dw, dh);
           } else {
-            const fbSrc = names[id]?.[1] || names[id]?.[0] || id;
+            const fbSrc = fallbackSource(names[id]?.[0] ?? id, names[id]?.[1] ?? "");
             x.fillStyle = fbColor(fbSrc);
             x.beginPath();
             x.arc(mx + 11, my + 11, 11, 0, 7);

@@ -1,5 +1,6 @@
 import { DEFAULT_ROWS, PRESETS } from "@/data/presets";
 import { ITEMS } from "@/data/catalog";
+import { isUploadedImage } from "@/lib/logos";
 import type { TierRow, TierState } from "@/lib/types";
 
 export const LS_STATE = "aitier.state";
@@ -13,6 +14,9 @@ const MAX_SUB = 40;
 const MAX_NAME = 60;
 const MAX_DOMAIN = 120;
 const MAX_ID = 64;
+/** Uploaded icons are ~4KB at 64px; the ceiling leaves room without inviting abuse. */
+const MAX_IMAGE = 24_000;
+const MAX_IMAGES = 40;
 
 const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
@@ -43,8 +47,19 @@ export function seed(presetId: string, customs: Record<string, [string, string]>
   return { p: preset.id, t: preset.title, rows, pool, customs, by: by ?? { name: "", handle: "" } };
 }
 
+/**
+ * Encode for the `?s=` link.
+ *
+ * Uploaded images are dropped: a few inline icons would push the URL past what
+ * browsers and social sites will carry. Recipients see letter marks for those
+ * items, while the author's stored copy keeps the images.
+ */
 export function encodeState(s: TierState): string {
-  return b64e(JSON.stringify(s));
+  const customs: Record<string, [string, string]> = {};
+  for (const [id, [name, value]] of Object.entries(s.customs)) {
+    customs[id] = [name, isUploadedImage(value) ? "" : value];
+  }
+  return b64e(JSON.stringify({ ...s, customs }));
 }
 
 function asRow(value: unknown, index: number): TierRow | null {
@@ -64,11 +79,20 @@ function asRow(value: unknown, index: number): TierRow | null {
 function asCustoms(value: unknown): Record<string, [string, string]> {
   const out: Record<string, [string, string]> = {};
   if (!value || typeof value !== "object") return out;
+  let images = 0;
   for (const [id, raw] of Object.entries(value as Record<string, unknown>)) {
     if (!Array.isArray(raw) || id.length > MAX_ID) continue;
     const name = text(raw[0], MAX_NAME).trim();
     if (!name) continue;
-    out[id] = [name, text(raw[1], MAX_DOMAIN).trim()];
+    const second = typeof raw[1] === "string" ? raw[1].trim() : "";
+    if (second.startsWith("data:")) {
+      // Never truncate base64 — a clipped data URL is a broken image, so drop it.
+      const ok = second.length <= MAX_IMAGE && images < MAX_IMAGES && isUploadedImage(second);
+      if (ok) images += 1;
+      out[id] = [name, ok ? second : ""];
+      continue;
+    }
+    out[id] = [name, second.slice(0, MAX_DOMAIN)];
   }
   return out;
 }
