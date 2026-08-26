@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
 import { Board, type ContainerId } from "@/components/board";
-import { AddItemDialog, LogoKeyDialog } from "@/components/dialogs";
+import { AddItemDialog, ConfirmDialog, LogoKeyDialog } from "@/components/dialogs";
 import { PRESETS } from "@/data/presets";
 import { ITEMS } from "@/data/catalog";
 import { allItems, encodeState, loadState, seed, LS_STATE } from "@/lib/state";
 import { exportPNG, copyPNG } from "@/lib/export-png";
 import type { TierState } from "@/lib/types";
+
+type ConfirmKind = "reset" | "preset" | "delete-row";
 
 export default function TierMaker() {
   const [state, setState] = useState<TierState | null>(null);
@@ -16,12 +18,18 @@ export default function TierMaker() {
   const [query, setQuery] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [keyOpen, setKeyOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [logoVersion, setLogoVersion] = useState(0);
   const [quickAdd, setQuickAdd] = useState("");
   const [toast, setToast] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState<{ kind: ConfirmKind; presetId?: string; rowIndex?: number } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stateRef = useRef<TierState | null>(null);
   const selRef = useRef<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const moreRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     stateRef.current = state;
     selRef.current = selectedId;
@@ -33,8 +41,39 @@ export default function TierMaker() {
     if (state) localStorage.setItem(LS_STATE, JSON.stringify(state));
   }, [state]);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      const editing = tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable;
+      if (e.key === "Escape") {
+        setSelectedId(null);
+        setMoreOpen(false);
+        setAddOpen(false);
+        setKeyOpen(false);
+        setConfirm(null);
+        return;
+      }
+      if (!editing && e.key === "/") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (!moreRef.current?.contains(e.target as Node)) setMoreOpen(false);
+    };
+    window.addEventListener("mousedown", onClick);
+    return () => window.removeEventListener("mousedown", onClick);
+  }, [moreOpen]);
+
   const names = useMemo(() => (state ? allItems(state) : {}), [state]);
-  const hasKey = useMemo(() => (typeof window !== "undefined" ? !!localStorage.getItem("aitier.logodev") : false), [logoVersion]);
+  const hasKey = typeof window !== "undefined" && logoVersion >= 0 && !!localStorage.getItem("aitier.logodev");
+  const preset = PRESETS.find((p) => p.id === state?.p) ?? PRESETS[0];
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -111,7 +150,6 @@ export default function TierMaker() {
   );
 
   const sendBack = useCallback((id: string) => moveItem(id, "pool"), [moveItem]);
-
   const factsOf = useCallback((id: string) => (stateRef.current?.customs[id] ? undefined : ITEMS[id]), []);
 
   const onRowLabel = useCallback((i: number, field: "l" | "sub", value: string) => {
@@ -136,39 +174,69 @@ export default function TierMaker() {
     const s = stateRef.current;
     if (!s) return;
     const row = s.rows[i];
-    if (row.items.length && !confirm(`Delete tier "${row.l}"? Its ${row.items.length} items go back to Unranked.`)) return;
-    setState((cur) => {
-      if (!cur) return cur;
-      return { ...cur, rows: cur.rows.filter((_, j) => j !== i), pool: [...cur.pool, ...cur.rows[i].items] };
-    });
+    if (row.items.length) {
+      setConfirm({ kind: "delete-row", rowIndex: i });
+      return;
+    }
+    setState((cur) => (cur ? { ...cur, rows: cur.rows.filter((_, j) => j !== i) } : cur));
   }, []);
 
-  if (!state) return null;
+  if (!state) {
+    return (
+      <>
+        <header className="site-header">
+          <div className="mx-auto flex max-w-[1100px] items-center gap-3 px-5 py-3">
+            <span className="brand-mark" aria-hidden="true" />
+            <span className="text-[15px] font-extrabold tracking-tight">
+              AI TIER MAKER<span className="text-[#c8f04b]">.</span>
+            </span>
+          </div>
+        </header>
+        <main className="mx-auto max-w-[1100px] px-5 pb-14 pt-8" aria-busy="true" aria-label="Loading board">
+          <div className="skeleton h-12 w-[min(520px,90%)]" />
+          <div className="skeleton mt-3 h-4 w-64" />
+          <div className="mt-8 flex flex-col gap-2.5">
+            {Array.from({ length: 6 }, (_, i) => (
+              <div key={i} className="skeleton h-[68px] w-full" />
+            ))}
+          </div>
+        </main>
+      </>
+    );
+  }
 
   const mutate = (fn: (s: TierState) => TierState) => setState((s) => (s ? fn(s) : s));
 
-  const switchPreset = (id: string) => {
-    const ranked = state.rows.some((r) => r.items.length);
-    if (ranked && !confirm("Switch preset? Current ranking will be lost.")) return;
+  const applyPreset = (id: string) => {
     setState(seed(id, state.customs, state.by));
     setSelectedId(null);
   };
 
+  const switchPreset = (id: string) => {
+    if (id === state.p) return;
+    const ranked = state.rows.some((r) => r.items.length);
+    if (ranked) {
+      setConfirm({ kind: "preset", presetId: id });
+      return;
+    }
+    applyPreset(id);
+  };
+
   const share = async () => {
-    const url = `${location.origin}${location.pathname}?s=${encodeState(state)}`;
-    history.replaceState(null, "", `?s=${encodeState(state)}`);
+    const encoded = encodeState(state);
+    const url = `${location.origin}${location.pathname}?s=${encoded}`;
+    history.replaceState(null, "", `?s=${encoded}`);
     const text = `${state.t} — my AI tier list${state.by.handle ? ` by ${state.by.handle}` : ""}`;
     try {
       await navigator.clipboard.writeText(`${text}\n${url}`);
-      showToast("Link copied ✓");
+      showToast("Link copied");
     } catch {
       showToast("Link is in the address bar");
     }
   };
 
   const addCustom = (name: string, domainRaw: string) => {
-    let d = domainRaw.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
-    if (!d) d = name.toLowerCase().replace(/[^a-z0-9]/g, "") + ".com";
+    const d = domainRaw.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
     const id = "u" + Date.now().toString(36);
     mutate((s) => ({ ...s, customs: { ...s.customs, [id]: [name, d] }, pool: [...s.pool, id] }));
     showToast(`${name} added`);
@@ -186,21 +254,91 @@ export default function TierMaker() {
       rows: [...s.rows, { l: String.fromCharCode(65 + ((s.rows.length + 3) % 26)), sub: "New", c: "#9775fa", items: [] }],
     }));
 
-  const reset = () => {
-    if (!confirm("Reset this tier list?")) return;
-    setState(seed(state.p, state.customs, state.by));
+  const runExport = async (mode: "download" | "copy") => {
+    setBusy(true);
+    try {
+      if (mode === "download") {
+        await exportPNG(state, names);
+        showToast("PNG downloaded");
+      } else {
+        const ok = await copyPNG(state, names);
+        showToast(ok ? "PNG copied" : "Copy not supported");
+      }
+    } finally {
+      setBusy(false);
+    }
   };
+
+  const runConfirm = () => {
+    if (!confirm) return;
+    switch (confirm.kind) {
+      case "reset":
+        setState(seed(state.p, state.customs, state.by));
+        setSelectedId(null);
+        showToast("List reset");
+        break;
+      case "preset":
+        if (confirm.presetId) applyPreset(confirm.presetId);
+        break;
+      case "delete-row": {
+        const i = confirm.rowIndex;
+        if (i == null) break;
+        setState((cur) => {
+          if (!cur) return cur;
+          const row = cur.rows[i];
+          if (!row) return cur;
+          return { ...cur, rows: cur.rows.filter((_, j) => j !== i), pool: [...cur.pool, ...row.items] };
+        });
+        break;
+      }
+      default: {
+        const _exhaustive: never = confirm.kind;
+        return _exhaustive;
+      }
+    }
+    setConfirm(null);
+  };
+
+  const confirmCopy = (() => {
+    if (!confirm) return { title: "", desc: "", label: "OK", danger: false };
+    switch (confirm.kind) {
+      case "reset":
+        return { title: "Reset this list?", desc: "Every item returns to the preset ranking. Custom items stay in Unranked.", label: "Reset", danger: true };
+      case "preset":
+        return { title: "Switch preset?", desc: "Your current ranking will be replaced by the new preset. Custom items are kept.", label: "Switch", danger: true };
+      case "delete-row": {
+        const row = confirm.rowIndex != null ? state.rows[confirm.rowIndex] : undefined;
+        return {
+          title: `Delete tier “${row?.l ?? ""}”?`,
+          desc: `${row?.items.length ?? 0} items will move back to Unranked.`,
+          label: "Delete tier",
+          danger: true,
+        };
+      }
+      default: {
+        const _exhaustive: never = confirm.kind;
+        return _exhaustive;
+      }
+    }
+  })();
 
   const q = query.trim().toLowerCase();
   const byline = [state.by.name, state.by.handle].filter(Boolean).join(" · ");
+  const selectedName = selectedId ? names[selectedId]?.[0] ?? selectedId : null;
+
+  const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    if (v.startsWith("@")) mutate((s) => ({ ...s, by: { ...s.by, handle: v } }));
+    else mutate((s) => ({ ...s, by: { ...s.by, handle: v ? "@" + v.replace(/^@+/, "") : "" } }));
+  };
 
   return (
     <>
-      <header className="sticky top-0 z-50 border-b border-[#232329] bg-[#0a0a0b]">
+      <header className="site-header">
         <div className="mx-auto flex max-w-[1100px] flex-wrap items-center gap-2 px-5 py-3">
-          <div className="mr-auto flex items-center gap-2 text-[15px] font-extrabold tracking-tight">
-            <span className="inline-block h-[10px] w-[10px] bg-[#c8f04b]" aria-hidden="true" />
-            AITIERMAKER<span className="text-[#c8f04b]">.</span>
+          <div className="mr-auto flex items-center gap-2.5 text-[15px] font-extrabold tracking-tight">
+            <span className="brand-mark" aria-hidden="true" />
+            AI TIER MAKER<span className="text-[#c8f04b]">.</span>
           </div>
           <select className="btn" value={state.p} onChange={(e) => switchPreset(e.target.value)} aria-label="Choose preset">
             {PRESETS.map((p) => (
@@ -209,48 +347,95 @@ export default function TierMaker() {
               </option>
             ))}
           </select>
-          <button className="btn" onClick={() => setAddOpen(true)}>+ Item</button>
-          <button className="btn" onClick={() => setKeyOpen(true)} title="Logo source settings">Logos</button>
-          <button className="btn" onClick={share}>Share</button>
-          <button className="btn" onClick={() => exportPNG(state, names).then(() => showToast("PNG downloaded"))}>Download PNG</button>
-          <button className="btn" onClick={() => copyPNG(state, names).then((ok) => showToast(ok ? "PNG copied ✓" : "Copy not supported"))}>Copy PNG</button>
-          <button className="btn" onClick={reset} title="Reset to preset">Reset</button>
-          <button className="btn" onClick={addRow} title="Add tier row">+ Row</button>
+          <button type="button" className="btn" onClick={() => setAddOpen(true)}>
+            + Item
+          </button>
+          <button type="button" className="btn hide-sm" onClick={addRow} title="Add tier row">
+            + Row
+          </button>
+          <button type="button" className="btn btn-primary" onClick={share}>
+            Share
+          </button>
+          <button type="button" className="btn hide-sm" disabled={busy} onClick={() => runExport("download")}>
+            {busy ? "Rendering…" : "Download PNG"}
+          </button>
+          <div className="relative show-sm" ref={moreRef}>
+            <button type="button" className="btn" aria-expanded={moreOpen} aria-haspopup="menu" onClick={() => setMoreOpen((v) => !v)}>
+              More
+            </button>
+            {moreOpen && (
+              <div className="more-menu" role="menu">
+                <button type="button" className="btn" role="menuitem" disabled={busy} onClick={() => { setMoreOpen(false); runExport("download"); }}>
+                  Download PNG
+                </button>
+                <button type="button" className="btn" role="menuitem" disabled={busy} onClick={() => { setMoreOpen(false); runExport("copy"); }}>
+                  Copy PNG
+                </button>
+                <button type="button" className="btn" role="menuitem" onClick={() => { setMoreOpen(false); addRow(); }}>
+                  + Row
+                </button>
+                <button type="button" className="btn" role="menuitem" onClick={() => { setMoreOpen(false); setKeyOpen(true); }}>
+                  Logos
+                </button>
+                <button type="button" className="btn btn-danger" role="menuitem" onClick={() => { setMoreOpen(false); setConfirm({ kind: "reset" }); }}>
+                  Reset
+                </button>
+              </div>
+            )}
+          </div>
+          <button type="button" className="btn hide-sm" disabled={busy} onClick={() => runExport("copy")}>
+            Copy PNG
+          </button>
+          <button type="button" className="btn hide-sm" onClick={() => setKeyOpen(true)} title="Logo source settings">
+            Logos
+          </button>
+          <button type="button" className="btn btn-danger hide-sm" onClick={() => setConfirm({ kind: "reset" })} title="Reset to preset">
+            Reset
+          </button>
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1100px] px-5 pb-14 pt-8">
+      <main id="main" className="mx-auto max-w-[1100px] px-5 pb-14 pt-8">
+        <p className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[#8b8f98]">{preset.desc}</p>
         <h1
-          className="min-w-[60px] cursor-text text-[clamp(28px,5vw,52px)] font-black uppercase leading-[1.02] tracking-[-0.02em] outline-none"
+          className="mt-1 min-w-[60px] cursor-text text-[clamp(28px,5vw,52px)] font-black uppercase leading-[1.02] tracking-[-0.02em] outline-none rounded-md hover:bg-[#18181d] focus:bg-[#18181d] px-1 -mx-1"
           contentEditable="plaintext-only"
           suppressContentEditableWarning
           spellCheck={false}
+          role="textbox"
+          aria-label="List title"
           onBlur={(e) => mutate((s) => ({ ...s, t: e.currentTarget.textContent?.trim() || "Untitled" }))}
         >
           {state.t}
         </h1>
-        <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.12em] text-[#8b8f98]">
-          Switch lanes, drag into tiers. Export a PNG and publish on X.
+        <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] uppercase tracking-[0.12em] text-[#8b8f98]">
+          <span>Drag into tiers · tap then tap a row on touch</span>
+          <span className="hide-sm inline-flex items-center gap-1.5">
+            Filter <kbd className="kbd">/</kbd>
+            <span className="text-[#5c6068]">·</span>
+            Deselect <kbd className="kbd">Esc</kbd>
+          </span>
         </p>
 
+        {selectedName && (
+          <div className="sel-banner" role="status">
+            <span className="h-2 w-2 rounded-full bg-[#c8f04b]" aria-hidden="true" />
+            <span>
+              Place <strong>{selectedName}</strong> — click a tier, another item, or Unranked.
+            </span>
+            <button type="button" className="btn ml-auto" onClick={() => setSelectedId(null)}>
+              Cancel
+            </button>
+          </div>
+        )}
+
         <div className="mt-5 mb-6 flex flex-wrap items-center gap-2">
-          <input
-            className="field w-[150px]"
-            placeholder="Your name"
-            aria-label="Your name"
-            value={state.by.name}
-            onChange={(e) => mutate((s) => ({ ...s, by: { ...s.by, name: e.target.value } }))}
-          />
-          <input
-            className="field w-[150px] font-mono"
-            placeholder="@handle"
-            aria-label="X handle"
-            value={state.by.handle}
-            onChange={(e) => mutate((s) => ({ ...s, by: { ...s.by, handle: e.target.value.startsWith("@") ? e.target.value : "@" + e.target.value } }))}
-          />
+          <input className="field w-[150px]" placeholder="Your name" aria-label="Your name" value={state.by.name} onChange={(e) => mutate((s) => ({ ...s, by: { ...s.by, name: e.target.value } }))} />
+          <input className="field w-[150px] font-mono" placeholder="@handle" aria-label="X handle" value={state.by.handle} onChange={handleInput} />
           {byline && <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-[#8b8f98]">created by {byline}</span>}
           <input
-            className="field ml-auto w-[190px]"
+            ref={searchRef}
+            className="field ml-auto w-[min(100%,190px)]"
             type="search"
             placeholder="Filter items…"
             aria-label="Filter items"
@@ -269,8 +454,8 @@ export default function TierMaker() {
           poolCount={state.pool.length}
           poolHeader={
             <input
-              className="field w-[230px]"
-              placeholder="Type a model name + Enter"
+              className="field w-[min(100%,230px)]"
+              placeholder="Type a name + Enter"
               aria-label="Quick add model"
               maxLength={40}
               value={quickAdd}
@@ -297,9 +482,10 @@ export default function TierMaker() {
         />
       </main>
 
-      <footer className="mx-auto flex max-w-[1100px] items-center gap-2 px-5 pb-10 font-mono text-[10px] uppercase tracking-[0.12em] text-[#8b8f98]">
-        <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: hasKey ? "#c8f04b" : "#55595f" }} />
-        <span>{hasKey ? "Logos by logo.dev" : "Fallback logo mode — add a logo.dev key via LOGOS"}</span>
+      <footer className="mx-auto flex max-w-[1100px] flex-wrap items-center gap-2 px-5 pb-10 font-mono text-[10px] uppercase tracking-[0.12em] text-[#8b8f98]">
+        <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: hasKey ? "#c8f04b" : "#55595f" }} aria-hidden="true" />
+        <span>{hasKey ? "Logos by logo.dev" : "Fallback logos — add a logo.dev key via Logos"}</span>
+        <span className="ml-auto text-[#5c6068]">Double-click a tile to unrank</span>
       </footer>
 
       <AddItemDialog open={addOpen} onClose={() => setAddOpen(false)} onAdd={addCustom} />
@@ -310,11 +496,17 @@ export default function TierMaker() {
           setLogoVersion((v) => v + 1);
         }}
       />
+      <ConfirmDialog
+        open={!!confirm}
+        title={confirmCopy.title}
+        desc={confirmCopy.desc}
+        confirmLabel={confirmCopy.label}
+        danger={confirmCopy.danger}
+        onCancel={() => setConfirm(null)}
+        onConfirm={runConfirm}
+      />
 
-      <div
-        className={`fixed bottom-6 left-1/2 z-[99] -translate-x-1/2 rounded-md border border-[#3a3a42] bg-[#17171c] px-4 py-2.5 font-mono text-[11px] uppercase tracking-[0.08em] transition-opacity ${toast ? "opacity-100" : "pointer-events-none opacity-0"}`}
-        role="status"
-      >
+      <div className={`toast${toast ? " on" : ""}`} role="status" aria-live="polite">
         {toast}
       </div>
     </>

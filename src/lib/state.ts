@@ -24,14 +24,37 @@ export function encodeState(s: TierState): string {
   return b64e(JSON.stringify(s));
 }
 
+function asState(value: unknown): TierState | null {
+  if (!value || typeof value !== "object") return null;
+  const s = value as TierState;
+  if (!Array.isArray(s.rows) || !Array.isArray(s.pool)) return null;
+  return {
+    p: typeof s.p === "string" ? s.p : PRESETS[0].id,
+    t: typeof s.t === "string" && s.t.trim() ? s.t : "Untitled",
+    rows: s.rows,
+    pool: s.pool,
+    customs: s.customs && typeof s.customs === "object" ? s.customs : {},
+    by: {
+      name: s.by?.name ?? "",
+      handle: s.by?.handle ?? "",
+    },
+  };
+}
+
 export function decodeState(raw: string): TierState | null {
   try {
-    const s = JSON.parse(b64d(raw)) as TierState;
-    if (!s || !Array.isArray(s.rows)) return null;
-    return s;
+    return asState(JSON.parse(b64d(raw)));
   } catch {
     return null;
   }
+}
+
+export function parseStored(raw: string): TierState | null {
+  try {
+    const parsed = asState(JSON.parse(raw));
+    if (parsed) return parsed;
+  } catch {}
+  return decodeState(raw);
 }
 
 export function loadState(): TierState {
@@ -45,7 +68,7 @@ export function loadState(): TierState {
   try {
     const raw = localStorage.getItem(LS_STATE);
     if (raw) {
-      const s = decodeState(raw);
+      const s = parseStored(raw);
       if (s) return s;
     }
   } catch {}
