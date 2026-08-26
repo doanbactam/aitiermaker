@@ -26,7 +26,7 @@ interface BoardProps {
   state: TierState;
   names: Record<string, [string, string]>;
   factsOf: (id: string) => CatalogItem | undefined;
-  selectedId: string | null;
+  selectedIds: readonly string[];
   poolFilter: string;
   catFilter: string;
   onCatFilter: (c: string) => void;
@@ -34,6 +34,7 @@ interface BoardProps {
   onMove: (id: string, toContainer: ContainerId, beforeId?: string) => void;
   onReorder: (container: ContainerId, from: number, to: number) => void;
   onSelect: (id: string) => void;
+  onSelectMany: (ids: string[]) => void;
   onZoneClick: (container: ContainerId, beforeId?: string) => void;
   onSendBack: (id: string) => void;
   onRemove: (id: string) => void;
@@ -103,9 +104,10 @@ function RowLabel({ i, total, row, onLabel, onColor, onDelete, onMoveRow }: { i:
 }
 
 export function Board(props: BoardProps) {
-  const { state, names, factsOf, selectedId, poolFilter, catFilter, onCatFilter, poolHeader, onMove, onReorder, onSelect, onZoneClick, onSendBack, onRemove, onRowLabel, onRowColor, onRowDelete, onRowMove } = props;
+  const { state, names, factsOf, selectedIds, poolFilter, catFilter, onCatFilter, poolHeader, onMove, onReorder, onSelect, onSelectMany, onZoneClick, onSendBack, onRemove, onRowLabel, onRowColor, onRowDelete, onRowMove } = props;
   const q = poolFilter.trim().toLowerCase();
   const [activeId, setActiveId] = useState<string | null>(null);
+  const selected = new Set(selectedIds);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -174,7 +176,7 @@ export function Board(props: BoardProps) {
       name={names[id]?.[0] ?? id}
       domain={names[id]?.[1] ?? ""}
       facts={factsOf(id)}
-      selected={selectedId === id}
+      selected={selected.has(id)}
       hidden={hidden}
       removable={removable}
       onClick={onSelect}
@@ -215,12 +217,17 @@ export function Board(props: BoardProps) {
         onZoneClick={onZoneClick}
         header={poolHeader}
         toolbar={
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by category">
-            {CAT_FILTERS.map(([c, label]) => (
-              <button key={c} type="button" className={`chip${catFilter === c ? " on" : ""}`} aria-pressed={catFilter === c} onClick={() => onCatFilter(c)}>
-                {label}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by category">
+              {CAT_FILTERS.map(([c, label]) => (
+                <button key={c} type="button" className={`chip${catFilter === c ? " on" : ""}`} aria-pressed={catFilter === c} onClick={() => onCatFilter(c)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <button type="button" className="btn ml-auto" disabled={!visiblePool.length} onClick={() => onSelectMany(visiblePool)}>
+              Select shown{visiblePool.length ? ` (${visiblePool.length})` : ""}
+            </button>
           </div>
         }
         emptyLabel={
@@ -252,31 +259,7 @@ export function Board(props: BoardProps) {
   );
 }
 
-function Row({
-  id,
-  rowIndex,
-  row,
-  rowsTotal,
-  empty,
-  children,
-  onZoneClick,
-  onRowLabel,
-  onRowColor,
-  onRowDelete,
-  onRowMove,
-}: {
-  id: ContainerId;
-  rowIndex: number;
-  row: TierState["rows"][number];
-  rowsTotal: number;
-  empty: boolean;
-  children: React.ReactNode;
-  onZoneClick: BoardProps["onZoneClick"];
-  onRowLabel: BoardProps["onRowLabel"];
-  onRowColor: BoardProps["onRowColor"];
-  onRowDelete: BoardProps["onRowDelete"];
-  onRowMove: BoardProps["onRowMove"];
-}) {
+function Row({ id, rowIndex, row, rowsTotal, empty, children, onZoneClick, onRowLabel, onRowColor, onRowDelete, onRowMove }: { id: ContainerId; rowIndex: number; row: TierState["rows"][number]; rowsTotal: number; empty: boolean; children: React.ReactNode; onZoneClick: BoardProps["onZoneClick"]; onRowLabel: BoardProps["onRowLabel"]; onRowColor: BoardProps["onRowColor"]; onRowDelete: BoardProps["onRowDelete"]; onRowMove: BoardProps["onRowMove"] }) {
   const { setNodeRef, isOver } = useDroppable({ id, data: { type: "container" } });
   return (
     <div ref={setNodeRef} className="trow" data-row={rowIndex}>
@@ -295,25 +278,7 @@ function Row({
   );
 }
 
-function Pool({
-  zoneId,
-  children,
-  onZoneClick,
-  header,
-  toolbar,
-  emptyLabel,
-  shown,
-  total,
-}: {
-  zoneId: ContainerId;
-  children: React.ReactNode;
-  onZoneClick: BoardProps["onZoneClick"];
-  header?: React.ReactNode;
-  toolbar?: React.ReactNode;
-  emptyLabel?: string;
-  shown: number;
-  total: number;
-}) {
+function Pool({ zoneId, children, onZoneClick, header, toolbar, emptyLabel, shown, total }: { zoneId: ContainerId; children: React.ReactNode; onZoneClick: BoardProps["onZoneClick"]; header?: React.ReactNode; toolbar?: React.ReactNode; emptyLabel?: string; shown: number; total: number }) {
   const { setNodeRef, isOver } = useDroppable({ id: zoneId, data: { type: "container" } });
   return (
     <section className="mt-4 rounded-[10px] border border-[#26262e] bg-[#111114] p-3.5">
