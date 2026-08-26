@@ -1,18 +1,29 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
+import { Plus, Search, X } from "lucide-react";
 import { Board, type ContainerId } from "@/components/board";
 import { Toolbar } from "@/components/toolbar";
 import { SelectionBar } from "@/components/selection-bar";
 import { AddItemDialog, ConfirmDialog } from "@/components/dialogs";
 import { PRESETS } from "@/data/presets";
 import { ITEMS } from "@/data/catalog";
-import { allItems, encodeState, loadState, seed, LS_STATE } from "@/lib/state";
+import { allItems, encodeState, loadState, seed, LS_STATE, shareLink } from "@/lib/state";
 import { exportPNG, copyPNG } from "@/lib/export-png";
+import { ShareDialog } from "@/components/share-dialog";
+import { AdActivityFeed, AdCarousel, AdFlank, AdMidBlock } from "@/components/ad-slot";
+import { carouselAds, feedAds, flankAds, midBoardAd } from "@/lib/ads";
 import type { TierState } from "@/lib/types";
+import type { SelectOpts } from "@/components/tile";
+import { Button } from "@/components/ui/button";
+import { FieldClear, FieldGroup, FieldGroupInput } from "@/components/ui/field";
+import { cn } from "@/lib/cn";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { brandMark, kbd, layoutShell, selBanner, siteHeader } from "@/lib/ui-styles";
 
-type ConfirmKind = "reset" | "preset" | "delete-row";
+type ConfirmKind = "reset" | "delete-row";
+type ToastState = { msg: string; undo?: () => void } | null;
 
 const HISTORY_LIMIT = 50;
 const COALESCE_MS = 700;
@@ -20,6 +31,21 @@ const TIER_PALETTE = ["#ff6b6b", "#ffa94d", "#ffd43b", "#51cf66", "#74c0fc", "#b
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 /** Above this, the selection bar shows only a count. */
 const NAME_PREVIEW = 3;
+
+type ClientBoot = { state: TierState; remixable: boolean };
+
+let clientBootCache: ClientBoot | null | undefined;
+
+function readClientBoot(): ClientBoot | null {
+  if (typeof window === "undefined") return null;
+  if (clientBootCache === undefined) {
+    clientBootCache = {
+      state: loadState(),
+      remixable: new URLSearchParams(window.location.search).has("s"),
+    };
+  }
+  return clientBootCache;
+}
 
 function nextLabel(rows: TierState["rows"]): string {
   const used = new Set(rows.map((r) => r.l.trim().toUpperCase()));
@@ -39,13 +65,22 @@ export default function TierMaker() {
   const [query, setQuery] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [quickAdd, setQuickAdd] = useState("");
-  const [toast, setToast] = useState("");
+  const [toast, setToast] = useState<ToastState>(null);
   const [busy, setBusy] = useState(false);
-  const [confirm, setConfirm] = useState<{ kind: ConfirmKind; presetId?: string; rowIndex?: number } | null>(null);
-  const [remixable, setRemixable] = useState(false);
+  const [confirm, setConfirm] = useState<{ kind: ConfirmKind; rowIndex?: number } | null>(null);
+  const [remixable, setRemixable] = useState<boolean | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareInfo, setShareInfo] = useState<{ url: string; text: string; og: string } | null>(null);
   const [catFilter, setCatFilter] = useState("all");
-  const [histVer, setHistVer] = useState(0);
+  const [histCounts, setHistCounts] = useState({ undo: 0, redo: 0 });
 
+  const clientBoot = useSyncExternalStore(
+    () => () => {},
+    readClientBoot,
+    () => null,
+  );
+
+  const lastAnchorRef = useRef<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stateRef = useRef<TierState | null>(null);
   const selRef = useRef<string[]>([]);
@@ -54,24 +89,26 @@ export default function TierMaker() {
   const futureRef = useRef<TierState[]>([]);
   const lastSnapRef = useRef<{ tag: string; at: number } | null>(null);
 
-  useEffect(() => {
-    stateRef.current = state;
-    selRef.current = selectedIds;
-  }, [state, selectedIds]);
+  const activeState = state ?? clientBoot?.state ?? null;
+  const activeRemixable = remixable ?? clientBoot?.remixable ?? false;
 
   useEffect(() => {
-    setState(loadState());
-    setRemixable(new URLSearchParams(window.location.search).has("s"));
+    stateRef.current = activeState;
+    selRef.current = selectedIds;
+  }, [activeState, selectedIds]);
+
+  const syncHist = useCallback(() => {
+    setHistCounts({ undo: pastRef.current.length, redo: futureRef.current.length });
   }, []);
 
   useEffect(() => {
-    if (state) localStorage.setItem(LS_STATE, JSON.stringify(state));
-  }, [state]);
+    if (activeState) localStorage.setItem(LS_STATE, JSON.stringify(activeState));
+  }, [activeState]);
 
-  const showToast = useCallback((msg: string) => {
-    setToast(msg);
+  const showToast = useCallback((msg: string, undo?: () => void) => {
+    setToast({ msg, undo });
     if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(""), 2200);
+    toastTimer.current = setTimeout(() => setToast(null), undo ? 4200 : 2200);
   }, []);
 
   useEffect(() => () => {
@@ -92,8 +129,8 @@ export default function TierMaker() {
     if (prev && JSON.stringify(prev) === JSON.stringify(cur)) return;
     pastRef.current = [...pastRef.current.slice(-(HISTORY_LIMIT - 1)), cur];
     futureRef.current = [];
-    setHistVer((v) => v + 1);
-  }, []);
+    syncHist();
+  }, [syncHist]);
 
   const undo = useCallback(() => {
     const prev = pastRef.current.pop();
@@ -106,8 +143,8 @@ export default function TierMaker() {
     lastSnapRef.current = null;
     setState(prev);
     setSelectedIds([]);
-    setHistVer((v) => v + 1);
-  }, [showToast]);
+    syncHist();
+  }, [showToast, syncHist]);
 
   const redo = useCallback(() => {
     const next = futureRef.current.pop();
@@ -120,29 +157,34 @@ export default function TierMaker() {
     lastSnapRef.current = null;
     setState(next);
     setSelectedIds([]);
-    setHistVer((v) => v + 1);
-  }, [showToast]);
+    syncHist();
+  }, [showToast, syncHist]);
 
   const mutate = useCallback((fn: (s: TierState) => TierState, tag = "") => {
     snap(tag);
-    setState((s) => (s ? fn(s) : s));
+    setState((s) => {
+      const cur = s ?? stateRef.current;
+      if (!cur) return s;
+      return fn(cur);
+    });
   }, [snap]);
 
   const moveItem = useCallback((id: string, to: ContainerId, beforeId?: string) => {
     snap();
     setState((s) => {
-      if (!s) return s;
-      const inPool = s.pool.includes(id);
-      const rowIdx = s.rows.findIndex((r) => r.items.includes(id));
-      if (!inPool && rowIdx < 0) return s;
+      const base = s ?? stateRef.current;
+      if (!base) return s;
+      const inPool = base.pool.includes(id);
+      const rowIdx = base.rows.findIndex((r) => r.items.includes(id));
+      if (!inPool && rowIdx < 0) return base;
       const from: ContainerId = inPool ? "pool" : `row-${rowIdx}`;
-      if (from === to && !beforeId) return s;
+      if (from === to && !beforeId) return base;
       if (to !== "pool") {
         const ti = Number(to.slice(4));
-        if (!Number.isInteger(ti) || ti < 0 || ti >= s.rows.length) return s;
+        if (!Number.isInteger(ti) || ti < 0 || ti >= base.rows.length) return base;
       }
-      const rows = [...s.rows];
-      let pool = s.pool;
+      const rows = [...base.rows];
+      let pool = base.pool;
       if (inPool) pool = pool.filter((x) => x !== id);
       else rows[rowIdx] = { ...rows[rowIdx], items: rows[rowIdx].items.filter((x) => x !== id) };
       if (to === "pool") {
@@ -159,7 +201,7 @@ export default function TierMaker() {
         else items.push(id);
         rows[ti] = { ...rows[ti], items };
       }
-      return { ...s, rows, pool };
+      return { ...base, rows, pool };
     });
   }, [snap]);
 
@@ -207,9 +249,45 @@ export default function TierMaker() {
     });
   }, [snap]);
 
-  const handleSelect = useCallback((id: string) => {
-    setSelectedIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
-  }, []);
+  const visiblePoolIds = useCallback((s: TierState) => {
+    const q = query.trim().toLowerCase();
+    const namesMap = allItems(s);
+    return s.pool.filter((id) => {
+      const okQ = !q || (namesMap[id]?.[0] ?? "").toLowerCase().includes(q);
+      const okC = catFilter === "all" || ITEMS[id]?.cat === catFilter;
+      return okQ && okC;
+    });
+  }, [query, catFilter]);
+
+  const orderForShift = useCallback((id: string, s: TierState): string[] | null => {
+    if (s.pool.includes(id)) return visiblePoolIds(s);
+    const rowIdx = s.rows.findIndex((r) => r.items.includes(id));
+    if (rowIdx >= 0) return s.rows[rowIdx].items;
+    return null;
+  }, [visiblePoolIds]);
+
+  const handleSelect = useCallback((id: string, opts: SelectOpts = {}) => {
+    const s = stateRef.current;
+    if (!s) return;
+    setSelectedIds((cur) => {
+      if (opts.shift && lastAnchorRef.current) {
+        const order = orderForShift(id, s) ?? orderForShift(lastAnchorRef.current, s);
+        if (order) {
+          const aIdx = order.indexOf(lastAnchorRef.current);
+          const bIdx = order.indexOf(id);
+          if (aIdx >= 0 && bIdx >= 0) {
+            const [lo, hi] = aIdx < bIdx ? [aIdx, bIdx] : [bIdx, aIdx];
+            const range = order.slice(lo, hi + 1);
+            return opts.additive ? Array.from(new Set([...cur, ...range])) : range;
+          }
+        }
+      }
+      if (opts.additive) return cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
+      if (cur.length === 1 && cur[0] === id) return [];
+      return [id];
+    });
+    if (!opts.shift) lastAnchorRef.current = id;
+  }, [orderForShift]);
 
   const selectMany = useCallback((ids: string[]) => {
     setSelectedIds((cur) => Array.from(new Set([...cur, ...ids])));
@@ -220,8 +298,8 @@ export default function TierMaker() {
     if (!ids.length) return;
     moveItems(ids, cont, beforeId);
     setSelectedIds([]);
-    showToast(`${ids.length} item${ids.length === 1 ? "" : "s"} moved`);
-  }, [moveItems, showToast]);
+    showToast(`${ids.length} item${ids.length === 1 ? "" : "s"} moved`, undo);
+  }, [moveItems, showToast, undo]);
 
   const sendBack = useCallback((id: string) => moveItem(id, "pool"), [moveItem]);
   const factsOf = useCallback((id: string) => (stateRef.current?.customs[id] ? undefined : ITEMS[id]), []);
@@ -270,11 +348,28 @@ export default function TierMaker() {
     mutate((s) => {
       const customs = { ...s.customs };
       delete customs[id];
-      return { ...s, pool: s.pool.filter((x) => x !== id), customs };
+      const labels = { ...(s.labels ?? {}) };
+      delete labels[id];
+      return { ...s, pool: s.pool.filter((x) => x !== id), customs, labels };
     });
     setSelectedIds((cur) => cur.filter((x) => x !== id));
     showToast("Removed from board");
   }, [mutate, showToast]);
+
+  const renameItem = useCallback((id: string, name: string) => {
+    const trimmed = name.trim().slice(0, 60);
+    if (!trimmed) return;
+    mutate((s) => {
+      if (s.customs[id] && !ITEMS[id]) {
+        return { ...s, customs: { ...s.customs, [id]: [trimmed, s.customs[id][1]] } };
+      }
+      const catalogName = ITEMS[id]?.name;
+      const labels = { ...(s.labels ?? {}) };
+      if (catalogName && trimmed === catalogName) delete labels[id];
+      else labels[id] = trimmed;
+      return { ...s, labels };
+    }, `rename-${id}`);
+  }, [mutate]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -297,7 +392,26 @@ export default function TierMaker() {
         setSelectedIds([]);
         setAddOpen(false);
         setConfirm(null);
+        setQuery("");
         return;
+      }
+      if (!editing && selRef.current.length && !mod) {
+        const s = stateRef.current;
+        if (s) {
+          if (e.key >= "1" && e.key <= "9") {
+            const i = Number(e.key) - 1;
+            if (i < s.rows.length) {
+              e.preventDefault();
+              placeSelection(`row-${i}`);
+            }
+            return;
+          }
+          if (e.key === "0") {
+            e.preventDefault();
+            placeSelection("pool");
+            return;
+          }
+        }
       }
       if (!editing && (e.key === "Delete" || e.key === "Backspace") && selRef.current.length) {
         e.preventDefault();
@@ -317,24 +431,30 @@ export default function TierMaker() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo, moveItems, showToast]);
+  }, [undo, redo, moveItems, showToast, placeSelection]);
 
-  const names = useMemo(() => (state ? allItems(state) : {}), [state]);
-  const preset = PRESETS.find((p) => p.id === state?.p) ?? PRESETS[0];
-  void histVer;
-  const canUndo = pastRef.current.length > 0;
-  const canRedo = futureRef.current.length > 0;
+  const names = useMemo(() => (activeState ? allItems(activeState) : {}), [activeState]);
+  const preset = PRESETS.find((p) => p.id === activeState?.p) ?? PRESETS[0];
+  const flankAdsList = useMemo(() => flankAds(2), []);
+  const carouselAdsList = useMemo(() => carouselAds(4), []);
+  const midAd = useMemo(() => midBoardAd(), []);
+  const feedAdsList = useMemo(() => feedAds(3), []);
+  const canUndo = histCounts.undo > 0;
+  const canRedo = histCounts.redo > 0;
 
-  if (!state) {
+  if (!activeState) {
     return (
       <>
-        <header className="site-header">
-          <div className="mx-auto flex max-w-[1200px] items-center gap-3 px-4 py-3">
-            <span className="brand-mark" aria-hidden="true" />
+        <header className={siteHeader}>
+          <div className={cn(layoutShell, "flex items-center gap-3 py-3")}>
+            <span className={brandMark} aria-hidden="true" />
             <span className="font-mono text-[13px] font-bold tracking-[0.08em]">AI TIER MAKER.</span>
+            <div className="ms-auto">
+              <ThemeToggle />
+            </div>
           </div>
         </header>
-        <main className="mx-auto max-w-[1200px] px-4 py-6">
+        <main className={cn(layoutShell, "py-section")}>
           <div className="flex flex-col gap-2.5" aria-busy="true" aria-label="Loading board">
             {Array.from({ length: 6 }, (_, i) => (
               <div key={i} className="skeleton h-[68px]" />
@@ -346,20 +466,23 @@ export default function TierMaker() {
   }
 
   const applyPreset = (id: string) => {
+    const s = stateRef.current;
+    if (!s || id === s.p) return;
     snap();
     setCatFilter("all");
-    setState(seed(id, state.customs, state.by));
+    setState(seed(id, s.customs, s.by, s.labels));
     setSelectedIds([]);
+    const next = PRESETS.find((p) => p.id === id);
+    showToast(next ? `Switched to ${next.title}` : "Preset switched", undo);
   };
 
   const switchPreset = (id: string) => {
-    if (id === state.p) return;
-    if (state.rows.some((r) => r.items.length)) setConfirm({ kind: "preset", presetId: id });
-    else applyPreset(id);
+    applyPreset(id);
   };
 
   const dealUnranked = () => {
-    if (!state.pool.length) {
+    const s = stateRef.current;
+    if (!s?.pool.length) {
       showToast("Nothing left to deal");
       return;
     }
@@ -378,36 +501,37 @@ export default function TierMaker() {
     showToast("Unranked dealt out");
   };
 
-  const sharePayload = () => {
-    const encoded = encodeState(state);
-    history.replaceState(null, "", `?s=${encoded}`);
-    const url = `${location.origin}${location.pathname}?s=${encoded}`;
-    const remixed = state.src ? ` · remixed from ${state.src}` : "";
-    const text = `${state.t} — my AI tier list${state.by.handle ? ` by ${state.by.handle}` : ""}${remixed}`;
-    return { text, url };
+  const openShare = () => {
+    const s = stateRef.current;
+    if (!s) return;
+    const info = shareLink(s, location.origin, location.pathname);
+    history.replaceState(null, "", `?s=${encodeState(s)}`);
+    setShareInfo(info);
+    setShareOpen(true);
   };
 
-  const share = async () => {
-    const { text, url } = sharePayload();
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: state.t, text, url });
-        return;
-      } catch {}
-    }
+  const copyShareLink = async () => {
+    if (!shareInfo) return;
     try {
-      await navigator.clipboard.writeText(`${text}\n${url}`);
+      await navigator.clipboard.writeText(shareInfo.url);
       showToast("Link copied");
     } catch {
-      showToast("Link is in the address bar");
+      showToast("Select the link and copy manually");
     }
+  };
+
+  const nativeShare = async () => {
+    if (!shareInfo || !stateRef.current) return;
+    try {
+      await navigator.share({ title: stateRef.current.t, text: shareInfo.text, url: shareInfo.url });
+    } catch {}
   };
 
   const postX = () => {
-    const { text, url } = sharePayload();
+    if (!shareInfo) return;
     const intent = new URL(["https:", "", "twitter.com", "intent", "tweet"].join("/"));
-    intent.searchParams.set("text", text);
-    intent.searchParams.set("url", url);
+    intent.searchParams.set("text", shareInfo.text);
+    intent.searchParams.set("url", shareInfo.url);
     window.open(intent.toString(), "_blank", "noopener");
   };
 
@@ -440,13 +564,15 @@ export default function TierMaker() {
   };
 
   const runExport = async (mode: "download" | "copy") => {
+    const s = stateRef.current;
+    if (!s) return;
     setBusy(true);
     try {
       if (mode === "download") {
-        await exportPNG(state, names);
+        await exportPNG(s, names);
         showToast("PNG downloaded");
       } else {
-        const ok = await copyPNG(state, names);
+        const ok = await copyPNG(s, names);
         showToast(ok ? "PNG copied" : "Copy not supported");
       }
     } finally {
@@ -457,24 +583,25 @@ export default function TierMaker() {
   const runConfirm = () => {
     if (!confirm) return;
     switch (confirm.kind) {
-      case "reset":
+      case "reset": {
+        const s = stateRef.current;
+        if (!s) break;
         snap();
-        setState(seed(state.p, state.customs, state.by));
+        setState(seed(s.p, s.customs, s.by, s.labels));
         setSelectedIds([]);
         showToast("List reset");
         break;
-      case "preset":
-        if (confirm.presetId) applyPreset(confirm.presetId);
-        break;
+      }
       case "delete-row": {
         const i = confirm.rowIndex;
         if (i == null) break;
         snap();
         setState((cur) => {
-          if (!cur) return cur;
-          const row = cur.rows[i];
-          if (!row) return cur;
-          return { ...cur, rows: cur.rows.filter((_, j) => j !== i), pool: [...cur.pool, ...row.items] };
+          const base = cur ?? stateRef.current;
+          if (!base) return cur;
+          const row = base.rows[i];
+          if (!row) return base;
+          return { ...base, rows: base.rows.filter((_, j) => j !== i), pool: [...base.pool, ...row.items] };
         });
         setSelectedIds([]);
         break;
@@ -486,13 +613,12 @@ export default function TierMaker() {
   const confirmCopy = (() => {
     if (!confirm) return { title: "", desc: "", label: "OK", danger: false };
     if (confirm.kind === "reset") return { title: "Reset this list?", desc: "Every item returns to the preset ranking. Custom items stay in Unranked.", label: "Reset", danger: true };
-    if (confirm.kind === "preset") return { title: "Switch preset?", desc: "Your current ranking will be replaced by the new preset. Custom items are kept.", label: "Switch", danger: true };
-    const row = confirm.rowIndex != null ? state.rows[confirm.rowIndex] : undefined;
+    const row = confirm.rowIndex != null ? activeState.rows[confirm.rowIndex] : undefined;
     return { title: `Delete tier “${row?.l ?? ""}”?`, desc: `${row?.items.length ?? 0} items will move back to Unranked.`, label: "Delete tier", danger: true };
   })();
 
-  const rankedCount = state.rows.reduce((a, r) => a + r.items.length, 0);
-  const totalCount = rankedCount + state.pool.length;
+  const rankedCount = activeState.rows.reduce((a, r) => a + r.items.length, 0);
+  const totalCount = rankedCount + activeState.pool.length;
   const pct = totalCount ? Math.round((rankedCount / totalCount) * 100) : 0;
   const previewNames = selectedIds.length <= NAME_PREVIEW ? selectedIds.map((id) => names[id]?.[0] ?? id) : [];
 
@@ -504,13 +630,9 @@ export default function TierMaker() {
 
   return (
     <>
-      <a className="skip-link" href="#board">
-        Skip to board
-      </a>
-
-      <header className="site-header">
+      <header className={siteHeader}>
         <Toolbar
-          presetId={state.p}
+          presetId={activeState.p}
           presets={PRESETS}
           onPreset={switchPreset}
           canUndo={canUndo}
@@ -519,129 +641,198 @@ export default function TierMaker() {
           onRedo={redo}
           onAddTier={addRow}
           onAddItem={() => setAddOpen(true)}
-          onShare={share}
+          onShare={openShare}
           onExport={runExport}
-          onPostX={postX}
           onDeal={dealUnranked}
           onReset={() => setConfirm({ kind: "reset" })}
           busy={busy}
         />
       </header>
 
-      <main id="board" className="mx-auto max-w-[1200px] px-4 py-6">
-        {remixable && (
-          <div className="sel-banner">
-            <span>Viewing {state.by.handle || state.by.name || "someone"}&apos;s tier list</span>
-            <button type="button" className="btn ml-auto" onClick={remix}>
+      <AdFlank ads={flankAdsList} />
+
+      <main id="board" className={cn(layoutShell, "flex-1 py-section")}>
+        {activeRemixable && (
+          <div className={selBanner}>
+            <span>Viewing {activeState.by.handle || activeState.by.name || "someone"}&apos;s tier list</span>
+            <Button className="ms-auto" onClick={remix}>
               Remix this
-            </button>
+            </Button>
           </div>
         )}
 
-        <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.1em] text-[#8b8f98]">{preset.desc}</p>
-        <h1
-          className="mt-1 text-[28px] font-bold tracking-tight outline-none"
-          role="textbox"
-          aria-label="List title"
-          contentEditable="plaintext-only"
-          suppressContentEditableWarning
-          spellCheck={false}
-          onBlur={(e) => {
-            const t = e.currentTarget.textContent?.trim() || "Untitled";
-            mutate((s) => ({ ...s, t }), "title");
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              e.currentTarget.blur();
-            }
-          }}
-        >
-          {state.t}
-        </h1>
-
-        <div className="mt-2.5 flex items-center gap-2.5">
-          <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Ranked progress">
-            <span style={{ width: `${pct}%` }} />
-          </div>
-          <span className="shrink-0 font-mono text-[11px] text-[#8b8f98]">
-            {rankedCount}/{totalCount} ranked
-          </span>
-        </div>
-
-        {selectedIds.length > 0 && <SelectionBar count={selectedIds.length} names={previewNames} rows={state.rows} onPlace={placeSelection} onClear={() => setSelectedIds([])} />}
-
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <input
-            className="field"
-            placeholder="Your name"
-            aria-label="Your name"
-            value={state.by.name}
-            onChange={(e) => {
-              const name = e.target.value;
-              mutate((s) => ({ ...s, by: { ...s.by, name } }), "by-name");
+        <section className="mt-2 pb-1">
+          <p className="font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-mut">{preset.desc}</p>
+          <h1
+            className="mt-1 text-[clamp(1.5rem,2.4vw,1.75rem)] font-bold tracking-[-0.02em] leading-[1.15] outline-none"
+            role="textbox"
+            aria-label="List title"
+            contentEditable="plaintext-only"
+            suppressContentEditableWarning
+            spellCheck={false}
+            onBlur={(e) => {
+              const t = e.currentTarget.textContent?.trim() || "Untitled";
+              mutate((s) => ({ ...s, t }), "title");
             }}
-          />
-          <input className="field" placeholder="@handle" aria-label="Your handle" value={state.by.handle} onChange={onHandleInput} />
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <input ref={searchRef} className="field" placeholder="Filter items  /" aria-label="Filter unranked items" value={query} onChange={(e) => setQuery(e.target.value)} />
-          <input
-            className="field"
-            placeholder="Quick add, then Enter"
-            aria-label="Quick add an item"
-            value={quickAdd}
-            onChange={(e) => setQuickAdd(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
-                const v = e.currentTarget.value.trim();
-                if (v) {
-                  addQuick(v);
-                  setQuickAdd("");
-                }
+                e.preventDefault();
+                e.currentTarget.blur();
               }
             }}
-          />
-        </div>
+          >
+            {activeState.t}
+          </h1>
 
-        <div className="mt-5">
+          <div className="mt-control flex flex-wrap items-end gap-x-group gap-y-control">
+            <div className="flex min-w-[min(100%,220px)] flex-1 items-center gap-control">
+              <div className="h-1 flex-1 overflow-hidden rounded-full bg-panel2" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Ranked progress">
+                <span className="block h-full rounded-full bg-lime transition-[width] duration-200 ease-out" style={{ width: `${pct}%` }} />
+              </div>
+              <span className="shrink-0 font-mono text-[11px] tabular-nums text-mut">
+                {rankedCount}/{totalCount} ranked
+              </span>
+            </div>
+
+            <div className="flex flex-wrap gap-inset [&_label]:min-w-[120px] [&_label]:max-w-[200px] [&_label]:flex-1 max-sm:[&_label]:max-w-none">
+              <FieldGroup>
+                <span className="sr-only">Your name</span>
+                <FieldGroupInput
+                  placeholder="Your name"
+                  autoComplete="name"
+                  value={activeState.by.name}
+                  onChange={(e) => {
+                    const name = e.target.value;
+                    mutate((s) => ({ ...s, by: { ...s.by, name } }), "by-name");
+                  }}
+                />
+              </FieldGroup>
+              <FieldGroup>
+                <span className="sr-only">Your handle</span>
+                <FieldGroupInput placeholder="@handle" autoComplete="username" value={activeState.by.handle} onChange={onHandleInput} />
+              </FieldGroup>
+            </div>
+          </div>
+        </section>
+
+        {carouselAdsList.length > 0 && <AdCarousel ads={carouselAdsList} />}
+
+        {selectedIds.length > 0 && <SelectionBar count={selectedIds.length} names={previewNames} rows={activeState.rows} onPlace={placeSelection} onClear={() => setSelectedIds([])} />}
+
+        <div key={activeState.p} className="board-switch mt-section">
           <Board
-            state={state}
+            state={activeState}
             names={names}
             factsOf={factsOf}
             selectedIds={selectedIds}
             poolFilter={query}
             catFilter={catFilter}
             onCatFilter={setCatFilter}
+            poolHeader={
+              <>
+                <FieldGroup>
+                  <Search size={14} strokeWidth={2} className="shrink-0 text-mut2" aria-hidden="true" />
+                  <span className="sr-only">Filter unranked items</span>
+                  <FieldGroupInput ref={searchRef} placeholder="Filter unranked  /" value={query} onChange={(e) => setQuery(e.target.value)} />
+                  {query && (
+                    <FieldClear aria-label="Clear filter" onClick={() => setQuery("")}>
+                      <X size={12} strokeWidth={2} aria-hidden="true" />
+                    </FieldClear>
+                  )}
+                </FieldGroup>
+                <FieldGroup>
+                  <Plus size={14} strokeWidth={2} className="shrink-0 text-mut2" aria-hidden="true" />
+                  <span className="sr-only">Quick add an item</span>
+                  <FieldGroupInput
+                    placeholder="Quick add, Enter"
+                    value={quickAdd}
+                    onChange={(e) => setQuickAdd(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const v = e.currentTarget.value.trim();
+                        if (v) {
+                          addQuick(v);
+                          setQuickAdd("");
+                        }
+                      }
+                    }}
+                  />
+                </FieldGroup>
+              </>
+            }
             onMove={moveItem}
+            onMoveMany={moveItems}
             onReorder={reorder}
             onSelect={handleSelect}
             onSelectMany={selectMany}
             onZoneClick={placeSelection}
             onSendBack={sendBack}
+            onRename={renameItem}
             onRowLabel={onRowLabel}
             onRowColor={onRowColor}
             onRowDelete={deleteRow}
             onRowMove={moveRow}
             onRemove={removeFromBoard}
+            midSlot={midAd ? <AdMidBlock ad={midAd} /> : undefined}
           />
         </div>
 
-        <p className="mt-5 font-mono text-[11px] text-[#5c6068]">
-          Click items to select · place with the tier chips · drag or double-click for one item
-          <span className="hide-sm">
-            {" "}· Filter <span className="kbd">/</span> · Clear <span className="kbd">Esc</span> · Unrank selected <span className="kbd">Del</span> · Undo <span className="kbd">Ctrl</span>{" "}
-            <span className="kbd">Z</span> · Redo <span className="kbd">Ctrl</span> <span className="kbd">⇧</span> <span className="kbd">Z</span>
+        {feedAdsList.length > 0 && <AdActivityFeed ads={feedAdsList} />}
+
+        <p className="mt-section font-mono text-[11px] leading-relaxed text-mut2">
+          Grip to drag · click name to rename · <span className={kbd}>⇧</span> range · tier chips or <span className={kbd}>1</span>–<span className={kbd}>9</span> to place
+          <span className="max-[1080px]:hidden">
+            {" "}· Filter <span className={kbd}>/</span> · Clear <span className={kbd}>Esc</span> · Unrank <span className={kbd}>Del</span> · Undo <span className={kbd}>Ctrl</span>{" "}
+            <span className={kbd}>Z</span>
           </span>
         </p>
       </main>
 
       <AddItemDialog open={addOpen} onClose={() => setAddOpen(false)} onAdd={addCustom} />
       <ConfirmDialog open={!!confirm} title={confirmCopy.title} desc={confirmCopy.desc} confirmLabel={confirmCopy.label} danger={confirmCopy.danger} onCancel={() => setConfirm(null)} onConfirm={runConfirm} />
+      {shareInfo && (
+        <ShareDialog
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+          title={activeState.t}
+          text={shareInfo.text}
+          url={shareInfo.url}
+          ogUrl={shareInfo.og}
+          busy={busy}
+          onCopyLink={copyShareLink}
+          onNativeShare={nativeShare}
+          onPostX={postX}
+          onExport={runExport}
+        />
+      )}
 
-      <div className={`toast${toast ? " on" : ""}`} role="status" aria-live="polite">
-        {toast}
+      <div
+        className={cn(
+          "fixed inset-x-0 bottom-[calc(24px+env(safe-area-inset-bottom))] z-[99] mx-auto flex w-fit max-w-[92vw] translate-x-[-50%] left-1/2 items-center gap-2.5 rounded-full border border-line2 bg-panel2 px-4 py-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.08em] shadow-pop transition-[opacity,transform] duration-200",
+          toast ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0",
+          toast?.undo && "pointer-events-auto",
+        )}
+        role="status"
+        aria-live="polite"
+      >
+        {toast && (
+          <>
+            <span>{toast.msg}</span>
+            {toast.undo && (
+              <button
+                type="button"
+                className="m-0 cursor-pointer rounded-full border border-lime bg-[color-mix(in_srgb,var(--color-lime)_12%,transparent)] px-2.5 py-1 font-inherit text-[10px] font-extrabold uppercase tracking-[0.06em] text-lime transition-[background-color,scale] duration-150 hover:bg-[color-mix(in_srgb,var(--color-lime)_22%,transparent)] active:scale-96"
+                onClick={() => {
+                  toast.undo!();
+                  setToast(null);
+                  if (toastTimer.current) clearTimeout(toastTimer.current);
+                }}
+              >
+                Undo
+              </button>
+            )}
+          </>
+        )}
       </div>
     </>
   );

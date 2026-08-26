@@ -1,5 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
+import { ThemeProvider } from "@/components/theme-provider";
+import { themeBootScript } from "@/lib/theme";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -27,20 +30,31 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#09090b",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f6f6f4" },
+    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
+  ],
   width: "device-width",
   initialScale: 1,
-  colorScheme: "dark",
+  colorScheme: "light dark",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col font-sans">
-        <a className="skip-link" href="#main">
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`} suppressHydrationWarning>
+      <head>
+        <Script id="theme-boot" strategy="beforeInteractive">
+          {themeBootScript}
+        </Script>
+      </head>
+      <body className="isolate min-h-full flex flex-col font-sans">
+        <a
+          className="absolute start-3 top-[-48px] z-[100] rounded-sm bg-lime px-3.5 py-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-on-lime focus:top-3"
+          href="#board"
+        >
           Skip to board
         </a>
-        {children}
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

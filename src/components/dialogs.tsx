@@ -1,18 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Dialog } from "@base-ui-components/react/dialog";
+import { Dialog } from "@base-ui/react/dialog";
+import { Button, buttonClass } from "@/components/ui/button";
+import { FieldInput } from "@/components/ui/field";
+import { cn } from "@/lib/cn";
+import { dialogBackdrop, dialogPanel, imgOutline } from "@/lib/ui-styles";
 
-/** Largest file we will read before downscaling. */
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
-/** Stored icons are square PNGs of this size, which keeps the data URL small. */
 const ICON_PX = 64;
 
-/**
- * Read a picked file and re-encode it as a small square PNG data URL.
- * Downscaling here is what makes inline storage viable: a 4MB photo becomes a
- * few KB, so localStorage and the state blob stay reasonable.
- */
 function fileToIcon(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     if (!file.type.startsWith("image/")) {
@@ -51,6 +48,8 @@ function fileToIcon(file: File): Promise<string> {
   });
 }
 
+const labelClass = "mt-3 block font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-mut first:mt-4";
+
 function Shell({
   open,
   onClose,
@@ -67,10 +66,10 @@ function Shell({
   return (
     <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="dialog-backdrop fixed inset-0" />
-        <Dialog.Popup className="dialog-panel">
+        <Dialog.Backdrop className={dialogBackdrop} />
+        <Dialog.Popup className={dialogPanel}>
           <Dialog.Title className="text-[17px] font-bold tracking-tight">{title}</Dialog.Title>
-          <Dialog.Description className="mt-1 text-[13px] leading-relaxed text-[#8b8f98]">{desc}</Dialog.Description>
+          <Dialog.Description className="mt-1 text-[13px] leading-relaxed text-mut">{desc}</Dialog.Description>
           {children}
         </Dialog.Popup>
       </Dialog.Portal>
@@ -101,38 +100,30 @@ function AddItemForm({ onClose, onAdd }: { onClose: () => void; onAdd: (name: st
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    // An uploaded image wins over a domain: it is what the user explicitly chose.
     onAdd(name.trim(), icon || domain.trim());
     onClose();
   };
 
   return (
     <form onSubmit={submit}>
-      <label className="mt-4 block font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-[#8b8f98]" htmlFor="add-name">
+      <label className={labelClass} htmlFor="add-name">
         Name
       </label>
-      <input id="add-name" className="field mt-1.5 w-full" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Perplexity Pro" required autoFocus />
+      <FieldInput id="add-name" className="mt-1.5" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Perplexity Pro" required autoFocus />
 
-      <label className="mt-3 block font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-[#8b8f98]" htmlFor="add-domain">
+      <label className={labelClass} htmlFor="add-domain">
         Website / domain
       </label>
-      <input
-        id="add-domain"
-        className="field mt-1.5 w-full"
-        value={domain}
-        onChange={(e) => setDomain(e.target.value)}
-        placeholder="e.g. perplexity.ai"
-        disabled={!!icon}
-      />
+      <FieldInput id="add-domain" className="mt-1.5" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="e.g. perplexity.ai" disabled={!!icon} />
 
-      <p className="mt-3 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-[#8b8f98]">Or upload an image</p>
+      <p className={labelClass}>Or upload an image</p>
       <div className="mt-1.5 flex items-center gap-2.5">
         {icon && (
-          <span className="mk" style={{ width: 34, height: 34 }}>
-            <img src={icon} alt="" width={26} height={26} />
+          <span className="grid size-[34px] place-items-center rounded-[5px]">
+            <img src={icon} alt="" width={26} height={26} className={cn("rounded-[5px] object-cover", imgOutline)} />
           </span>
         )}
-        <label className="btn cursor-pointer">
+        <label className={cn(buttonClass(), "cursor-pointer")}>
           {reading ? "Reading…" : icon ? "Replace" : "Choose file"}
           <input
             type="file"
@@ -145,27 +136,25 @@ function AddItemForm({ onClose, onAdd }: { onClose: () => void; onAdd: (name: st
           />
         </label>
         {icon && (
-          <button type="button" className="btn btn-danger" onClick={() => setIcon("")}>
+          <Button variant="danger" onClick={() => setIcon("")}>
             Remove
-          </button>
+          </Button>
         )}
       </div>
-      <p className="mt-2 text-[12px] leading-relaxed text-[#5c6068]">
+      <p className="mt-2 text-xs leading-relaxed text-mut2">
         Stored with your list as a 64px icon. Uploaded images are left out of share links to keep them short.
       </p>
       {error && (
-        <p className="mt-2 text-[12px] text-[#ff6b6b]" role="alert">
+        <p className="mt-2 text-xs text-danger" role="alert">
           {error}
         </p>
       )}
 
       <div className="mt-5 flex justify-end gap-2">
-        <button type="button" className="btn" onClick={onClose}>
-          Cancel
-        </button>
-        <button type="submit" className="btn btn-primary" disabled={reading}>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="primary" type="submit" disabled={reading}>
           Add item
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -199,12 +188,10 @@ export function ConfirmDialog({
   return (
     <Shell open={open} onClose={onCancel} title={title} desc={desc}>
       <div className="mt-5 flex justify-end gap-2">
-        <button type="button" className="btn" onClick={onCancel}>
-          Cancel
-        </button>
-        <button type="button" className={`btn ${danger ? "btn-danger" : "btn-primary"}`} onClick={onConfirm}>
+        <Button onClick={onCancel}>Cancel</Button>
+        <Button variant={danger ? "danger" : "primary"} onClick={onConfirm}>
           {confirmLabel}
-        </button>
+        </Button>
       </div>
     </Shell>
   );

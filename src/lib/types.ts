@@ -28,6 +28,8 @@ export interface TierState {
   rows: TierRow[];
   pool: string[];
   customs: Record<string, [string, string]>;
+  /** User-edited display names for catalog items (id → name). */
+  labels?: Record<string, string>;
   by: { name: string; handle: string };
   /** handle/name of the creator whose shared list this was remixed from */
   src?: string;

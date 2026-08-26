@@ -3,18 +3,22 @@
 import { memo } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Popover } from "@base-ui-components/react/popover";
+import { GripVertical, X } from "lucide-react";
 import type { CatalogItem } from "@/lib/types";
 import { MARKS } from "@/data/icons";
 import { imageSources, fallbackSource, fbColor } from "@/lib/logos";
-import { fmtCtx } from "@/lib/state";
+import { cn } from "@/lib/cn";
+import { imgOutline } from "@/lib/ui-styles";
 
 export function Mark({ mark, domain, name, size = 22 }: { mark?: string; domain: string; name?: string; size?: number }) {
   const m = mark ? MARKS[mark] : undefined;
   if (m) {
     const dark = parseInt(m.bg.slice(1, 3), 16) * 0.299 + parseInt(m.bg.slice(3, 5), 16) * 0.587 + parseInt(m.bg.slice(5, 7), 16) * 0.114 < 60;
     return (
-      <span className={`mk${dark ? " dark" : ""}`} style={{ background: m.bg, width: size, height: size }}>
+      <span
+        className={cn("grid shrink-0 place-items-center rounded-[5px]", dark && "shadow-[inset_0_0_0_1px_#2e2e35]")}
+        style={{ background: m.bg, width: size, height: size }}
+      >
         <svg viewBox="0 0 24 24" width={size - 8} height={size - 8} aria-hidden="true">
           <path d={m.path} fill={m.fg} />
         </svg>
@@ -27,8 +31,8 @@ export function Mark({ mark, domain, name, size = 22 }: { mark?: string; domain:
 
   if (!sources.length) {
     return (
-      <span className="mk" style={{ width: size, height: size }}>
-        <span className="fb" style={{ background: fbColor(fbSrc) }}>
+      <span className="grid shrink-0 place-items-center rounded-[5px]" style={{ width: size, height: size }}>
+        <span className="grid size-full place-items-center rounded-[5px] text-xs font-extrabold text-[#101013]" style={{ background: fbColor(fbSrc) }}>
           {fbSrc[0].toUpperCase()}
         </span>
       </span>
@@ -36,7 +40,7 @@ export function Mark({ mark, domain, name, size = 22 }: { mark?: string; domain:
   }
 
   return (
-    <span className="mk" style={{ width: size, height: size }}>
+    <span className="grid shrink-0 place-items-center rounded-[5px]" style={{ width: size, height: size }}>
       <img
         src={sources[0]}
         alt=""
@@ -45,6 +49,7 @@ export function Mark({ mark, domain, name, size = 22 }: { mark?: string; domain:
         loading="lazy"
         decoding="async"
         draggable={false}
+        className={cn("rounded-[3px] object-contain pointer-events-none", imgOutline)}
         data-step="0"
         onError={(e) => {
           const img = e.currentTarget;
@@ -55,7 +60,7 @@ export function Mark({ mark, domain, name, size = 22 }: { mark?: string; domain:
             return;
           }
           const fb = document.createElement("span");
-          fb.className = "fb";
+          fb.className = "grid size-full place-items-center rounded-[5px] text-xs font-extrabold text-[#101013]";
           fb.style.background = fbColor(fbSrc);
           fb.textContent = fbSrc[0].toUpperCase();
           img.replaceWith(fb);
@@ -65,6 +70,8 @@ export function Mark({ mark, domain, name, size = 22 }: { mark?: string; domain:
   );
 }
 
+export type SelectOpts = { shift?: boolean; additive?: boolean };
+
 interface TileProps {
   id: string;
   name: string;
@@ -72,33 +79,42 @@ interface TileProps {
   facts?: CatalogItem;
   selected: boolean;
   hidden?: boolean;
+  ghost?: boolean;
   removable?: boolean;
-  onClick: (id: string) => void;
+  onClick: (id: string, opts: SelectOpts) => void;
   onSendBack: (id: string) => void;
+  onRename: (id: string, name: string) => void;
   onRemove?: (id: string) => void;
 }
 
-export const Tile = memo(function Tile({ id, name, domain, facts, selected, hidden, removable, onClick, onSendBack, onRemove }: TileProps) {
+export const Tile = memo(function Tile({ id, name, domain, facts, selected, hidden, ghost, removable, onClick, onSendBack, onRename, onRemove }: TileProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, data: { type: "item" } });
 
   return (
     <div
       ref={setNodeRef}
       data-id={id}
-      className={`tile${selected ? " sel" : ""}${isDragging ? " dragging" : ""}`}
+      className={cn(
+        "group/tile relative inline-flex h-10 cursor-default touch-manipulation select-none items-center gap-2 rounded-lg border border-line bg-panel2 py-0 ps-1.5 pe-2.5 transition-[border-color,background] duration-150",
+        "hover:border-line2 hover:bg-[color-mix(in_srgb,var(--color-panel2)_88%,var(--color-fg))]",
+        selected && "border-lime shadow-[0_0_0_1px_var(--color-lime)]",
+        isDragging && "cursor-grabbing opacity-40",
+        ghost && "pointer-events-none opacity-15",
+      )}
       style={{ transform: CSS.Transform.toString(transform), transition, display: hidden ? "none" : undefined }}
-      {...attributes}
-      {...listeners}
-      onClick={() => onClick(id)}
+      onClick={(e) => onClick(id, { shift: e.shiftKey, additive: e.metaKey || e.ctrlKey })}
       onDoubleClick={() => onSendBack(id)}
       aria-label={name}
       aria-pressed={selected}
-      title={`${name} — drag to rank, click then click a tier, double-click to unrank`}
+      title={`${name} — click name to rename · grip to drag · tier chips or 1–9 to place · double-click to unrank`}
     >
       {removable && onRemove && (
         <button
           type="button"
-          className="info-btn absolute -top-1.5 -left-1.5 h-4 w-4 rounded-full border border-[#3a3a42] bg-[#26262c] font-mono text-[9px] font-bold text-[#a0a4ac] opacity-0 transition-opacity [div.tile:hover_&]:opacity-100 focus:opacity-100 cursor-pointer leading-none"
+          className={cn(
+            "absolute -start-2 -top-2 grid size-6 place-items-center rounded-full border border-line2 bg-panel2 text-mut opacity-0 transition-[opacity,background,color,scale] duration-150",
+            "group-hover/tile:opacity-100 focus-visible:opacity-100 hover:bg-panel hover:text-fg active:scale-96 touch-show",
+          )}
           aria-label={`Remove ${name} from board`}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
@@ -106,52 +122,52 @@ export const Tile = memo(function Tile({ id, name, domain, facts, selected, hidd
             onRemove(id);
           }}
         >
-          ×
+          <X size={10} strokeWidth={2} aria-hidden="true" />
         </button>
       )}
       <Mark mark={facts?.mark} domain={domain} name={name} />
-      <span className="nm">{name}</span>
-      <svg className="grip" viewBox="0 0 24 24" width={12} height={12} aria-hidden="true" fill="currentColor">
-        <circle cx="9" cy="5" r="1.7" />
-        <circle cx="15" cy="5" r="1.7" />
-        <circle cx="9" cy="12" r="1.7" />
-        <circle cx="15" cy="12" r="1.7" />
-        <circle cx="9" cy="19" r="1.7" />
-        <circle cx="15" cy="19" r="1.7" />
-      </svg>
-      {facts && (
-        <Popover.Root>
-          <Popover.Trigger
-            className="info-btn absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full border border-[#3a3a42] bg-[#26262c] font-mono text-[9px] font-bold text-[#a0a4ac] opacity-0 transition-opacity [div.tile:hover_&]:opacity-100 focus:opacity-100 cursor-pointer leading-none"
-            aria-label={`Facts: ${name}`}
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
-          >
-            i
-          </Popover.Trigger>
-          <Popover.Portal>
-            <Popover.Positioner sideOffset={8}>
-              <Popover.Popup className="factspop">
-                <p className="text-[13px] font-bold text-white">
-                  {facts.name} <span className="font-normal text-[#8b8f98]">· {facts.vendor}</span>
-                </p>
-                <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 font-mono text-[11px]">
-                  <dt className="text-[#8b8f98] uppercase tracking-wider">License</dt>
-                  <dd className="font-semibold">{facts.license ?? "—"}</dd>
-                  <dt className="text-[#8b8f98] uppercase tracking-wider">Context</dt>
-                  <dd className="font-semibold">{fmtCtx(facts.ctx)}</dd>
-                  <dt className="text-[#8b8f98] uppercase tracking-wider">Price</dt>
-                  <dd className="font-semibold">{facts.price ? `$${facts.price.in} / $${facts.price.out} MTok` : "—"}</dd>
-                  <dt className="text-[#8b8f98] uppercase tracking-wider">Elo ref</dt>
-                  <dd className="font-semibold">{facts.elo ?? "—"}</dd>
-                  <dt className="text-[#8b8f98] uppercase tracking-wider">Updated</dt>
-                  <dd className="font-semibold">{facts.updated}</dd>
-                </dl>
-              </Popover.Popup>
-            </Popover.Positioner>
-          </Popover.Portal>
-        </Popover.Root>
-      )}
+      <span
+        className={cn(
+          "cursor-text rounded px-0.5 text-[13px] font-semibold whitespace-nowrap outline-none",
+          "focus:bg-hover focus:shadow-[0_0_0_2px_color-mix(in_srgb,var(--color-lime)_45%,transparent)]",
+          "group-hover/tile:underline group-hover/tile:decoration-mut2/55 group-hover/tile:underline-offset-[3px] group-focus-within/tile:group-hover/tile:no-underline",
+        )}
+        role="textbox"
+        aria-label={`Rename ${name}`}
+        contentEditable="plaintext-only"
+        suppressContentEditableWarning
+        spellCheck={false}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+        onBlur={(e) => {
+          const next = e.currentTarget.textContent?.trim() ?? "";
+          if (next && next !== name) onRename(id, next);
+          e.currentTarget.textContent = next && next !== name ? next : name;
+        }}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.currentTarget.blur();
+          }
+          if (e.key === "Escape") {
+            e.currentTarget.textContent = name;
+            e.currentTarget.blur();
+          }
+        }}
+      >
+        {name}
+      </span>
+      <button
+        type="button"
+        className="grid h-[22px] w-[18px] shrink-0 cursor-grab touch-none place-items-center rounded border-0 bg-transparent text-mut2 transition-[color,background-color] duration-150 group-hover/tile:text-mut hover:bg-hover active:cursor-grabbing"
+        aria-label={`Drag ${name}`}
+        {...attributes}
+        {...listeners}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <GripVertical size={12} strokeWidth={2} aria-hidden="true" />
+      </button>
     </div>
   );
 });
