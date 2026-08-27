@@ -26,6 +26,22 @@ export const CAT_FILTERS: readonly [Category | "all", string][] = [
   ["infra", "Infra"],
 ];
 
+/**
+ * WCAG relative luminance. Tier colours come from a free colour picker, so the
+ * label has to decide its own ink — hardcoded black text disappears the moment
+ * someone picks a dark tier.
+ */
+function relativeLuminance(hex: string): number {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  if (full.length !== 6) return 1;
+  const channel = (i: number) => {
+    const v = parseInt(full.slice(i, i + 2), 16) / 255;
+    return Number.isNaN(v) ? 1 : v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
+}
+
 interface BoardProps {
   state: TierState;
   names: Record<string, [string, string]>;
@@ -58,15 +74,19 @@ const dropZoneClass = (isOver: boolean) =>
   );
 
 const actionBtn =
-  "grid size-6 place-items-center rounded border-0 bg-transparent text-mut transition-[background,color,scale] duration-150 hover:bg-[color-mix(in_srgb,var(--color-fg)_8%,transparent)] hover:text-fg active:scale-96 disabled:cursor-default disabled:opacity-30 disabled:active:scale-100";
+  "grid size-7 place-items-center rounded border-0 bg-transparent text-mut transition-[background,color,scale] duration-150 hover:bg-[color-mix(in_srgb,var(--color-fg)_8%,transparent)] hover:text-fg active:scale-96 disabled:cursor-default disabled:opacity-30 disabled:active:scale-100";
 
 function RowLabel({ i, row, onLabel }: { i: number; row: TierState["rows"][number]; onLabel: BoardProps["onRowLabel"] }) {
   const long = row.l.length > 2;
+  const darkChip = relativeLuminance(row.c) < 0.36;
+  const ring = darkChip ? "focus:shadow-[0_0_0_2px_rgba(255,255,255,0.45)]" : "focus:shadow-[0_0_0_2px_rgba(0,0,0,0.28)]";
   return (
     <div className="group/tlabel relative flex w-24 max-sm:w-[72px] max-sm:px-1 max-sm:py-2 shrink-0 cursor-default flex-col items-center justify-center gap-0.5 px-2 py-2.5" style={{ background: row.c }}>
       <span
         className={cn(
-          "z-1 max-w-full cursor-text text-center font-black leading-none text-black/85 outline-none [overflow-wrap:anywhere] rounded-[3px] px-0.5 focus:shadow-[0_0_0_2px_rgba(0,0,0,0.28)]",
+          "z-1 max-w-full cursor-text text-center font-black leading-none outline-none [overflow-wrap:anywhere] rounded-[3px] px-0.5",
+          darkChip ? "text-white/92" : "text-black/85",
+          ring,
           long ? "text-[13px] leading-snug tracking-normal" : "text-[28px] max-sm:text-[22px]",
         )}
         role="textbox"
@@ -88,7 +108,9 @@ function RowLabel({ i, row, onLabel }: { i: number; row: TierState["rows"][numbe
       </span>
       <span
         className={cn(
-          "z-1 max-w-full min-h-0 cursor-text text-center font-mono text-[8px] font-bold uppercase tracking-[0.08em] text-black/50 outline-none [overflow-wrap:anywhere] rounded-[3px] px-0.5 max-sm:hidden focus:shadow-[0_0_0_2px_rgba(0,0,0,0.28)]",
+          "z-1 max-w-full min-h-0 cursor-text text-center font-mono text-[8px] font-bold uppercase tracking-[0.08em] outline-none [overflow-wrap:anywhere] rounded-[3px] px-0.5 max-sm:hidden",
+          darkChip ? "text-white/65" : "text-black/50",
+          ring,
           !row.sub && "empty:before:pointer-events-none empty:before:opacity-0 empty:before:content-[attr(data-ph)] group-hover/tlabel:empty:before:opacity-35 group-focus-within/tlabel:empty:before:opacity-35",
         )}
         role="textbox"
@@ -111,7 +133,7 @@ function RowActions({ i, total, row, onColor, onDelete, onMoveRow }: { i: number
     <div
       className={cn(
         "absolute end-1.5 top-1.5 z-2 flex items-center gap-px rounded-sm border border-line p-0.5",
-        "bg-[color-mix(in_srgb,var(--color-panel2)_92%,transparent)] backdrop-blur-sm shadow-[0_4px_14px_rgba(0,0,0,0.22)]",
+        "bg-[color-mix(in_srgb,var(--color-panel2)_92%,transparent)] backdrop-blur-sm shadow-[0_4px_14px_var(--theme-backdrop)]",
         "pointer-events-none invisible opacity-0 transition-opacity duration-150 ease-[cubic-bezier(0.2,0,0,1)]",
         "group-hover/trow:pointer-events-auto group-hover/trow:visible group-hover/trow:opacity-100",
         "group-focus-within/trow:pointer-events-auto group-focus-within/trow:visible group-focus-within/trow:opacity-100 touch-show",
@@ -119,7 +141,7 @@ function RowActions({ i, total, row, onColor, onDelete, onMoveRow }: { i: number
       role="toolbar"
       aria-label={`Actions for tier ${row.l}`}
     >
-      <label className="relative grid size-6 shrink-0 cursor-pointer place-items-center rounded text-mut transition-[background,color] hover:bg-[color-mix(in_srgb,var(--color-fg)_8%,transparent)] hover:text-fg" title="Change color">
+      <label className="relative grid size-7 shrink-0 cursor-pointer place-items-center rounded text-mut transition-[background,color] hover:bg-[color-mix(in_srgb,var(--color-fg)_8%,transparent)] hover:text-fg" title="Change color">
         <span className="size-2.5 rounded-full shadow-[inset_0_0_0_1.5px_color-mix(in_srgb,var(--color-fg)_18%,transparent)]" style={{ background: row.c }} />
         <input type="color" value={row.c} aria-label={`Color for tier ${row.l}`} className="absolute inset-0 size-full cursor-pointer border-0 p-0 opacity-0" onChange={(e) => onColor(i, e.target.value)} />
       </label>
@@ -322,7 +344,7 @@ export function Board(props: BoardProps) {
 
       <DragOverlay dropAnimation={{ duration: 180, easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)" }}>
         {activeId ? (
-          <div className="relative inline-flex h-10 cursor-grabbing items-center gap-2 rounded-lg border border-lime bg-panel2 py-0 ps-1.5 pe-2.5 shadow-[0_12px_32px_rgba(0,0,0,0.5)]">
+          <div className="relative inline-flex h-10 cursor-grabbing items-center gap-2 rounded-lg border border-lime bg-panel2 py-0 ps-1.5 pe-2.5 shadow-[0_12px_32px_var(--theme-backdrop)]">
             <Mark mark={factsOf(activeId)?.mark} domain={names[activeId]?.[1] ?? ""} name={names[activeId]?.[0]} />
             <span className="text-[13px] font-semibold whitespace-nowrap">{names[activeId]?.[0] ?? activeId}</span>
             {dragGroup.length > 1 && (
