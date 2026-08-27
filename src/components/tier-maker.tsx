@@ -12,8 +12,8 @@ import { ITEMS } from "@/data/catalog";
 import { allItems, encodeState, loadState, seed, LS_STATE, shareLink } from "@/lib/state";
 import { exportPNG, copyPNG } from "@/lib/export-png";
 import { ShareDialog } from "@/components/share-dialog";
-import { AdActivityFeed, AdCarousel, AdFlank, AdMidBlock } from "@/components/ad-slot";
-import { carouselAds, feedAds, flankAds, midBoardAd } from "@/lib/ads";
+import { AdMidBlock, AdSponsors } from "@/components/ad-slot";
+import { midBoardAd, sponsorAds } from "@/lib/ads";
 import type { TierState } from "@/lib/types";
 import type { SelectOpts } from "@/components/tile";
 import { Button } from "@/components/ui/button";
@@ -435,10 +435,8 @@ export default function TierMaker() {
 
   const names = useMemo(() => (activeState ? allItems(activeState) : {}), [activeState]);
   const preset = PRESETS.find((p) => p.id === activeState?.p) ?? PRESETS[0];
-  const flankAdsList = useMemo(() => flankAds(2), []);
-  const carouselAdsList = useMemo(() => carouselAds(4), []);
+  const sponsors = useMemo(() => sponsorAds(), []);
   const midAd = useMemo(() => midBoardAd(), []);
-  const feedAdsList = useMemo(() => feedAds(3), []);
   const canUndo = histCounts.undo > 0;
   const canRedo = histCounts.redo > 0;
 
@@ -649,8 +647,6 @@ export default function TierMaker() {
         />
       </header>
 
-      <AdFlank ads={flankAdsList} />
-
       <main id="board" className={cn(layoutShell, "flex-1 py-section")}>
         {activeRemixable && (
           <div className={selBanner}>
@@ -715,8 +711,6 @@ export default function TierMaker() {
           </div>
         </section>
 
-        {carouselAdsList.length > 0 && <AdCarousel ads={carouselAdsList} />}
-
         {selectedIds.length > 0 && <SelectionBar count={selectedIds.length} names={previewNames} rows={activeState.rows} onPlace={placeSelection} onClear={() => setSelectedIds([])} />}
 
         <div key={activeState.p} className="board-switch mt-section">
@@ -777,7 +771,7 @@ export default function TierMaker() {
           />
         </div>
 
-        {feedAdsList.length > 0 && <AdActivityFeed ads={feedAdsList} />}
+        <AdSponsors ads={sponsors} />
 
         <p className="mt-section font-mono text-[11px] leading-relaxed text-mut2">
           Grip to drag · click name to rename · <span className={kbd}>⇧</span> range · tier chips or <span className={kbd}>1</span>–<span className={kbd}>9</span> to place

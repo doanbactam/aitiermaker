@@ -12,20 +12,19 @@ export const brandMark =
 const btnCore =
   "inline-flex items-center justify-center gap-[7px] min-h-9 rounded-sm border font-mono text-[11px] font-semibold uppercase tracking-[0.08em] whitespace-nowrap cursor-pointer outline-none transition-[border-color,background,color,opacity,box-shadow,transform] duration-150 active:scale-96 disabled:opacity-45 disabled:cursor-not-allowed disabled:active:scale-100";
 
+/* Border, background and the lime accent carry hierarchy on their own. The
+   layered drop shadow and inset highlight these used to have implied a depth
+   the rest of the theme never uses. */
 export const btnDefault = cn(
   btnCore,
   "px-[13px] py-2 border-line bg-transparent text-fg",
-  "shadow-[0_1px_2px_var(--theme-backdrop),inset_0_1px_0_var(--theme-hover)]",
   "enabled:hover:border-line2 enabled:hover:bg-panel2",
-  "enabled:hover:shadow-[0_2px_8px_var(--theme-backdrop),inset_0_1px_0_var(--theme-hover)]",
 );
 
 export const btnPrimary = cn(
   btnCore,
   "px-[13px] py-2 border-lime bg-lime text-on-lime",
-  "shadow-[0_1px_3px_var(--theme-backdrop),inset_0_1px_0_oklch(1_0_0/0.22)]",
   "enabled:hover:border-lime-hot enabled:hover:bg-lime-hot",
-  "enabled:hover:shadow-[0_3px_10px_var(--theme-backdrop),inset_0_1px_0_oklch(1_0_0/0.28)]",
 );
 
 export const btnDanger = cn(

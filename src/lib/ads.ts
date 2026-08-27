@@ -1,42 +1,53 @@
 import { ADS, type Ad, type AdSlot } from "@/data/ads";
 
-function daySeed(): number {
-  const d = new Date();
-  return d.getFullYear() * 1000 + d.getMonth() * 50 + d.getDate();
+/** Filled in this order. An earlier slot wins an ad both slots could use. */
+const SLOT_ORDER: AdSlot[] = ["mid-board", "list"];
+
+const SLOT_LIMIT: Record<AdSlot, number> = { "mid-board": 1, list: 3 };
+
+/**
+ * Rotates daily. Read in UTC on purpose: a server in UTC and a browser in
+ * UTC+7 otherwise disagree about the date for seven hours a day, which rotates
+ * a different ad into the same slot and trips a hydration mismatch.
+ */
+function daySeed(now = new Date()): number {
+  return now.getUTCFullYear() * 372 + now.getUTCMonth() * 31 + now.getUTCDate();
 }
 
-function slotSeed(slot: AdSlot): number {
-  let h = daySeed();
-  for (const ch of slot) h = (h * 31 + ch.charCodeAt(0)) | 0;
-  return Math.abs(h);
-}
-
-function rotate<T>(items: T[], seed: number, count: number): T[] {
-  if (!items.length || count <= 0) return [];
-  const out: T[] = [];
-  for (let i = 0; i < Math.min(count, items.length); i += 1) {
-    out.push(items[(seed + i) % items.length]);
+/**
+ * Assigns every slot in one pass so a sponsor is never shown twice on the same
+ * page. Filling slots independently is what let one ad occupy the flank, the
+ * carousel and the mid-board block simultaneously.
+ */
+function allocate(seed: number): Record<AdSlot, Ad[]> {
+  const out: Record<AdSlot, Ad[]> = { "mid-board": [], list: [] };
+  const taken = new Set<string>();
+  for (const slot of SLOT_ORDER) {
+    const pool = ADS.filter((ad) => ad.slots.includes(slot) && !taken.has(ad.id));
+    const take = Math.min(SLOT_LIMIT[slot], pool.length);
+    for (let i = 0; i < take; i += 1) {
+      const ad = pool[(seed + i) % pool.length];
+      if (taken.has(ad.id)) continue;
+      taken.add(ad.id);
+      out[slot].push(ad);
+    }
   }
   return out;
 }
 
-export function adsForSlot(slot: AdSlot, count = 1): Ad[] {
-  const pool = ADS.filter((a) => a.slots.includes(slot));
-  return rotate(pool, slotSeed(slot), count);
-}
+let cache: { seed: number; slots: Record<AdSlot, Ad[]> } | null = null;
 
-export function flankAds(count = 2): Ad[] {
-  return adsForSlot("flank", count);
-}
-
-export function carouselAds(count = 4): Ad[] {
-  return adsForSlot("carousel", count);
+/** Memoised per day so every slot in one render sees the same allocation. */
+function slots(): Record<AdSlot, Ad[]> {
+  const seed = daySeed();
+  if (!cache || cache.seed !== seed) cache = { seed, slots: allocate(seed) };
+  return cache.slots;
 }
 
 export function midBoardAd(): Ad | null {
-  return adsForSlot("mid-board", 1)[0] ?? null;
+  return slots()["mid-board"][0] ?? null;
 }
 
-export function feedAds(count = 3): Ad[] {
-  return adsForSlot("feed", count);
+export function sponsorAds(): Ad[] {
+  return slots().list;
 }
