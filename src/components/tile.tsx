@@ -95,8 +95,9 @@ export const Tile = memo(function Tile({ id, name, domain, facts, selected, hidd
       ref={setNodeRef}
       data-id={id}
       className={cn(
-        "group/tile relative inline-flex h-10 cursor-default touch-manipulation select-none items-center gap-2 rounded-lg border border-line bg-panel2 py-0 ps-1.5 pe-2.5 transition-[border-color,background] duration-150",
+        "group/tile relative inline-flex h-10 cursor-default touch-manipulation select-none items-center gap-1 rounded-lg border border-line bg-panel2 py-0 ps-1 pe-1.5 transition-[border-color,background] duration-150",
         "hover:border-line2 hover:bg-[color-mix(in_srgb,var(--color-panel2)_88%,var(--color-fg))]",
+        "has-[:focus-visible]:border-line2",
         selected && "border-lime shadow-[0_0_0_1px_var(--color-lime)]",
         isDragging && "cursor-grabbing opacity-40",
         ghost && "pointer-events-none opacity-15",
@@ -104,15 +105,12 @@ export const Tile = memo(function Tile({ id, name, domain, facts, selected, hidd
       style={{ transform: CSS.Transform.toString(transform), transition, display: hidden ? "none" : undefined }}
       onClick={(e) => onClick(id, { shift: e.shiftKey, additive: e.metaKey || e.ctrlKey })}
       onDoubleClick={() => onSendBack(id)}
-      aria-label={name}
-      aria-pressed={selected}
-      title={`${name} — click name to rename · grip to drag · tier chips or 1–9 to place · double-click to unrank`}
     >
       {removable && onRemove && (
         <button
           type="button"
           className={cn(
-            "absolute -start-2 -top-2 grid size-6 place-items-center rounded-full border border-line2 bg-panel2 text-mut opacity-0 transition-[opacity,background,color,scale] duration-150",
+            "absolute -start-2 -top-2 grid size-7 place-items-center rounded-full border border-line2 bg-panel2 text-mut opacity-0 transition-[opacity,background,color,scale] duration-150",
             "group-hover/tile:opacity-100 focus-visible:opacity-100 hover:bg-panel hover:text-fg active:scale-96 touch-show",
           )}
           aria-label={`Remove ${name} from board`}
@@ -122,10 +120,28 @@ export const Tile = memo(function Tile({ id, name, domain, facts, selected, hidd
             onRemove(id);
           }}
         >
-          <X size={10} strokeWidth={2} aria-hidden="true" />
+          <X size={11} strokeWidth={2} aria-hidden="true" />
         </button>
       )}
-      <Mark mark={facts?.mark} domain={domain} name={name} />
+
+      {/* The logo doubles as the select control: selection is the app's primary
+          action, so it needs a real button. The tile root cannot take the role
+          itself — it wraps a contenteditable name and two other buttons. */}
+      <button
+        type="button"
+        className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 transition-[background-color] duration-150 hover:bg-hover"
+        aria-pressed={selected}
+        aria-label={`Select ${name}`}
+        onPointerDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick(id, { shift: e.shiftKey, additive: e.metaKey || e.ctrlKey });
+        }}
+      >
+        <Mark mark={facts?.mark} domain={domain} name={name} />
+      </button>
+
       <span
         className={cn(
           "cursor-text rounded px-0.5 text-[13px] font-semibold whitespace-nowrap outline-none",
@@ -158,9 +174,10 @@ export const Tile = memo(function Tile({ id, name, domain, facts, selected, hidd
       >
         {name}
       </span>
+
       <button
         type="button"
-        className="grid h-[22px] w-[18px] shrink-0 cursor-grab touch-none place-items-center rounded border-0 bg-transparent text-mut2 transition-[color,background-color] duration-150 group-hover/tile:text-mut hover:bg-hover active:cursor-grabbing"
+        className="grid size-7 shrink-0 cursor-grab touch-none place-items-center rounded border-0 bg-transparent text-mut2 transition-[color,background-color] duration-150 group-hover/tile:text-mut hover:bg-hover active:cursor-grabbing"
         aria-label={`Drag ${name}`}
         {...attributes}
         {...listeners}
