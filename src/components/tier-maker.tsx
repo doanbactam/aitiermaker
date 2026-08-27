@@ -5,46 +5,66 @@ import { arrayMove } from "@dnd-kit/sortable";
 import { Plus, Search, X } from "lucide-react";
 import { Board, type ContainerId } from "@/components/board";
 import { Toolbar } from "@/components/toolbar";
+import { BoardFooter } from "@/components/board-footer";
+import { BoardTitle } from "@/components/board-title";
+import { SiteShell } from "@/components/site-shell";
 import { SelectionBar } from "@/components/selection-bar";
-import { AddItemDialog, ConfirmDialog } from "@/components/dialogs";
-import { PRESETS } from "@/data/presets";
+import { AddItemDialog, ConfirmDialog, ExportDialog, LogoKeyDialog, PostXDialog } from "@/components/dialogs";
 import { ITEMS } from "@/data/catalog";
-import { allItems, encodeState, loadState, seed, LS_STATE, shareLink } from "@/lib/state";
-import { exportPNG, copyPNG } from "@/lib/export-png";
-import { ShareDialog } from "@/components/share-dialog";
-import { AdMidBlock, AdSponsors } from "@/components/ad-slot";
-import { midBoardAd, sponsorAds } from "@/lib/ads";
-import type { TierState } from "@/lib/types";
+import { normalizeDomain } from "@/lib/logos";
+import { allItems, loadState, seed, LS_STATE } from "@/lib/state";
+import { postCaption, publicShareOrigin } from "@/lib/share";
+import { exportPNG, copyPNG, renderPngObjectUrl, sharePNGForX } from "@/lib/export-png";
+import type { TierRow, TierState } from "@/lib/types";
 import type { SelectOpts } from "@/components/tile";
-import { Button } from "@/components/ui/button";
-import { FieldClear, FieldGroup, FieldGroupInput } from "@/components/ui/field";
+import { FieldClear, FieldGroup, FieldGroupInput, FieldLabel } from "@/components/ui/field";
 import { cn } from "@/lib/cn";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { brandMark, kbd, layoutShell, selBanner, siteHeader } from "@/lib/ui-styles";
+import { BrandLogo } from "@/components/brand-logo";
+import { layoutShell } from "@/lib/ui-styles";
+import { TIER_PALETTE } from "@/lib/theme-colors";
 
 type ConfirmKind = "reset" | "delete-row";
 type ToastState = { msg: string; undo?: () => void } | null;
 
 const HISTORY_LIMIT = 50;
 const COALESCE_MS = 700;
-const TIER_PALETTE = ["#ff6b6b", "#ffa94d", "#ffd43b", "#51cf66", "#74c0fc", "#b197fc", "#f783ac", "#63e6be"];
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 /** Above this, the selection bar shows only a count. */
 const NAME_PREVIEW = 3;
 
-type ClientBoot = { state: TierState; remixable: boolean };
+let clientBootCache: TierState | null | undefined;
 
-let clientBootCache: ClientBoot | null | undefined;
-
-function readClientBoot(): ClientBoot | null {
+function readClientBoot(): TierState | null {
   if (typeof window === "undefined") return null;
-  if (clientBootCache === undefined) {
-    clientBootCache = {
-      state: loadState(),
-      remixable: new URLSearchParams(window.location.search).has("s"),
+  if (clientBootCache === undefined) clientBootCache = loadState();
+  return clientBootCache;
+}
+
+function customItemId(): string {
+  return "u" + Date.now().toString(36);
+}
+
+function confirmDialogCopy(
+  confirm: { kind: ConfirmKind; rowIndex?: number } | null,
+  rows: TierRow[],
+): { title: string; desc: string; label: string; danger: boolean } {
+  if (!confirm) return { title: "", desc: "", label: "OK", danger: false };
+  if (confirm.kind === "reset") {
+    return {
+      title: "Reset this list?",
+      desc: "Clears all rankings. Custom items stay in Unranked.",
+      label: "Reset",
+      danger: true,
     };
   }
-  return clientBootCache;
+  const row = confirm.rowIndex != null ? rows[confirm.rowIndex] : undefined;
+  return {
+    title: `Delete tier “${row?.l ?? ""}”?`,
+    desc: `${row?.items.length ?? 0} items will move back to Unranked.`,
+    label: "Delete tier",
+    danger: true,
+  };
 }
 
 function nextLabel(rows: TierState["rows"]): string {
@@ -68,9 +88,11 @@ export default function TierMaker() {
   const [toast, setToast] = useState<ToastState>(null);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<{ kind: ConfirmKind; rowIndex?: number } | null>(null);
-  const [remixable, setRemixable] = useState<boolean | null>(null);
-  const [shareOpen, setShareOpen] = useState(false);
-  const [shareInfo, setShareInfo] = useState<{ url: string; text: string; og: string } | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportMode, setExportMode] = useState<"download" | "copy">("download");
+  const [postXOpen, setPostXOpen] = useState(false);
+  const [postPreviewUrl, setPostPreviewUrl] = useState<string | null>(null);
+  const [logoKeyOpen, setLogoKeyOpen] = useState(false);
   const [catFilter, setCatFilter] = useState("all");
   const [histCounts, setHistCounts] = useState({ undo: 0, redo: 0 });
 
@@ -89,8 +111,7 @@ export default function TierMaker() {
   const futureRef = useRef<TierState[]>([]);
   const lastSnapRef = useRef<{ tag: string; at: number } | null>(null);
 
-  const activeState = state ?? clientBoot?.state ?? null;
-  const activeRemixable = remixable ?? clientBoot?.remixable ?? false;
+  const activeState = state ?? clientBoot ?? null;
 
   useEffect(() => {
     stateRef.current = activeState;
@@ -290,7 +311,8 @@ export default function TierMaker() {
   }, [orderForShift]);
 
   const selectMany = useCallback((ids: string[]) => {
-    setSelectedIds((cur) => Array.from(new Set([...cur, ...ids])));
+    setSelectedIds(ids);
+    if (ids.length) lastAnchorRef.current = ids[ids.length - 1] ?? null;
   }, []);
 
   const placeSelection = useCallback((cont: ContainerId, beforeId?: string) => {
@@ -304,13 +326,13 @@ export default function TierMaker() {
   const sendBack = useCallback((id: string) => moveItem(id, "pool"), [moveItem]);
   const factsOf = useCallback((id: string) => (stateRef.current?.customs[id] ? undefined : ITEMS[id]), []);
 
-  const onRowLabel = useCallback((i: number, field: "l" | "sub", value: string) => {
+  const onTierRename = useCallback((i: number, value: string) => {
     mutate((s) => {
       const rows = [...s.rows];
       if (!rows[i]) return s;
-      rows[i] = { ...rows[i], [field]: value };
+      rows[i] = { ...rows[i], l: value };
       return { ...s, rows };
-    }, `row-${field}-${i}`);
+    }, `row-l-${i}`);
   }, [mutate]);
 
   const onRowColor = useCallback((i: number, color: string) => {
@@ -371,6 +393,8 @@ export default function TierMaker() {
     }, `rename-${id}`);
   }, [mutate]);
 
+  const onTitleChange = useCallback((t: string) => mutate((s) => ({ ...s, t }), "title"), [mutate]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -393,6 +417,17 @@ export default function TierMaker() {
         setAddOpen(false);
         setConfirm(null);
         setQuery("");
+        return;
+      }
+      if (!editing && mod && e.key.toLowerCase() === "a") {
+        const s = stateRef.current;
+        if (s) {
+          const visible = visiblePoolIds(s);
+          if (visible.length) {
+            e.preventDefault();
+            selectMany(visible);
+          }
+        }
         return;
       }
       if (!editing && selRef.current.length && !mod) {
@@ -431,134 +466,112 @@ export default function TierMaker() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo, moveItems, showToast, placeSelection]);
+  }, [undo, redo, moveItems, showToast, placeSelection, selectMany, visiblePoolIds]);
 
   const names = useMemo(() => (activeState ? allItems(activeState) : {}), [activeState]);
-  const preset = PRESETS.find((p) => p.id === activeState?.p) ?? PRESETS[0];
-  const sponsors = useMemo(() => sponsorAds(), []);
-  const midAd = useMemo(() => midBoardAd(), []);
   const canUndo = histCounts.undo > 0;
   const canRedo = histCounts.redo > 0;
 
+  useEffect(() => {
+    if (!postXOpen) return;
+    const s = stateRef.current;
+    if (!s) return;
+    let cancelled = false;
+    let url: string | null = null;
+    void (async () => {
+      const next = await renderPngObjectUrl(s, allItems(s));
+      if (cancelled) {
+        if (next) URL.revokeObjectURL(next);
+        return;
+      }
+      url = next;
+      setPostPreviewUrl((cur) => {
+        if (cur) URL.revokeObjectURL(cur);
+        return next;
+      });
+    })();
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+      else {
+        setPostPreviewUrl((cur) => {
+          if (cur) URL.revokeObjectURL(cur);
+          return null;
+        });
+      }
+    };
+  }, [postXOpen, activeState?.t, activeState?.by.name, activeState?.by.handle, activeState?.rows, activeState?.customs, activeState?.labels]);
+
   if (!activeState) {
     return (
-      <>
-        <header className={siteHeader}>
-          <div className={cn(layoutShell, "flex items-center gap-3 py-3")}>
-            <span className={brandMark} aria-hidden="true" />
-            <span className="font-mono text-[13px] font-bold tracking-[0.08em]">AI TIER MAKER.</span>
+      <SiteShell
+        header={
+          <div className={cn(layoutShell, "flex min-h-(--site-header-h) items-center gap-3 py-2")}>
+            <BrandLogo asLink={false} />
             <div className="ms-auto">
               <ThemeToggle />
             </div>
           </div>
-        </header>
-        <main className={cn(layoutShell, "py-section")}>
-          <div className="flex flex-col gap-2.5" aria-busy="true" aria-label="Loading board">
-            {Array.from({ length: 6 }, (_, i) => (
-              <div key={i} className="skeleton h-[68px]" />
-            ))}
-          </div>
-        </main>
-      </>
+        }
+        footer={<BoardFooter onLogoKey={() => setLogoKeyOpen(true)} />}
+      >
+        <div className="flex flex-col gap-2.5" aria-busy="true" aria-label="Loading board">
+          {Array.from({ length: 6 }, (_, i) => (
+            <div key={i} className="skeleton h-[68px]" />
+          ))}
+        </div>
+      </SiteShell>
     );
   }
 
-  const applyPreset = (id: string) => {
-    const s = stateRef.current;
-    if (!s || id === s.p) return;
-    snap();
-    setCatFilter("all");
-    setState(seed(id, s.customs, s.by, s.labels));
-    setSelectedIds([]);
-    const next = PRESETS.find((p) => p.id === id);
-    showToast(next ? `Switched to ${next.title}` : "Preset switched", undo);
-  };
+  const openPostX = () => setPostXOpen(true);
 
-  const switchPreset = (id: string) => {
-    applyPreset(id);
-  };
-
-  const dealUnranked = () => {
-    const s = stateRef.current;
-    if (!s?.pool.length) {
-      showToast("Nothing left to deal");
-      return;
-    }
-    mutate((s) => {
-      const ids = [...s.pool];
-      for (let i = ids.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [ids[i], ids[j]] = [ids[j], ids[i]];
-      }
-      const rows = s.rows.map((r) => ({ ...r, items: [...r.items] }));
-      if (!rows.length) return s;
-      ids.forEach((id, idx) => rows[idx % rows.length].items.push(id));
-      return { ...s, pool: [], rows };
-    });
-    setSelectedIds([]);
-    showToast("Unranked dealt out");
-  };
-
-  const openShare = () => {
+  const confirmPostX = async () => {
     const s = stateRef.current;
     if (!s) return;
-    const info = shareLink(s, location.origin, location.pathname);
-    history.replaceState(null, "", `?s=${encodeState(s)}`);
-    setShareInfo(info);
-    setShareOpen(true);
-  };
-
-  const copyShareLink = async () => {
-    if (!shareInfo) return;
+    const caption = postCaption(s);
+    setBusy(true);
     try {
-      await navigator.clipboard.writeText(shareInfo.url);
-      showToast("Link copied");
-    } catch {
-      showToast("Select the link and copy manually");
+      const result = await sharePNGForX(s, names, caption);
+      if (result === "shared") {
+        setPostXOpen(false);
+        showToast("Share sheet opened — choose X to post");
+        return;
+      }
+      if (result === "failed") {
+        showToast("Could not prepare PNG");
+        return;
+      }
+      const intent = new URL("https://twitter.com/intent/tweet");
+      intent.searchParams.set("text", caption);
+      intent.searchParams.set("url", publicShareOrigin());
+      window.open(intent.toString(), "_blank", "noopener");
+      setPostXOpen(false);
+      showToast("PNG downloaded — attach it with the image button in X");
+    } finally {
+      setBusy(false);
     }
-  };
-
-  const nativeShare = async () => {
-    if (!shareInfo || !stateRef.current) return;
-    try {
-      await navigator.share({ title: stateRef.current.t, text: shareInfo.text, url: shareInfo.url });
-    } catch {}
-  };
-
-  const postX = () => {
-    if (!shareInfo) return;
-    const intent = new URL(["https:", "", "twitter.com", "intent", "tweet"].join("/"));
-    intent.searchParams.set("text", shareInfo.text);
-    intent.searchParams.set("url", shareInfo.url);
-    window.open(intent.toString(), "_blank", "noopener");
-  };
-
-  const remix = () => {
-    mutate((s) => ({ ...s, by: { name: "", handle: "" }, src: s.by.handle || s.by.name || s.src }));
-    history.replaceState(null, "", location.pathname);
-    setRemixable(false);
-    showToast("Remixed — make it yours");
   };
 
   const addCustom = (name: string, domainRaw: string) => {
-    const d = domainRaw.startsWith("data:image/") ? domainRaw : domainRaw.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
-    const id = "u" + Date.now().toString(36);
+    const d = domainRaw.startsWith("data:image/") ? domainRaw : normalizeDomain(domainRaw);
+    const id = customItemId();
     mutate((s) => ({ ...s, customs: { ...s.customs, [id]: [name, d] }, pool: [...s.pool, id] }));
     showToast(`${name} added`);
   };
 
   const addQuick = (name: string) => {
-    const id = "u" + Date.now().toString(36);
+    const id = customItemId();
     mutate((s) => ({ ...s, customs: { ...s.customs, [id]: [name, ""] }, pool: [...s.pool, id] }));
     showToast(`${name} added`);
   };
 
-  const addRow = (where: "top" | "bottom") => {
+  const addRow = () => {
     mutate((s) => {
-      const row = { l: nextLabel(s.rows), sub: "New", c: nextColor(s.rows), items: [] as string[] };
-      return { ...s, rows: where === "top" ? [row, ...s.rows] : [...s.rows, row] };
+      const row = { l: nextLabel(s.rows), sub: "", c: nextColor(s.rows), items: [] as string[] };
+      return { ...s, rows: [...s.rows, row] };
     });
-    showToast(where === "top" ? "Tier added on top" : "Tier added");
+    showToast("Tier added");
   };
 
   const runExport = async (mode: "download" | "copy") => {
@@ -571,11 +584,17 @@ export default function TierMaker() {
         showToast("PNG downloaded");
       } else {
         const ok = await copyPNG(s, names);
-        showToast(ok ? "PNG copied" : "Copy not supported");
+        showToast(ok ? "PNG copied" : "Copy not supported in this browser — download instead");
       }
     } finally {
       setBusy(false);
+      setExportOpen(false);
     }
+  };
+
+  const queueExport = (mode: "download" | "copy") => {
+    setExportMode(mode);
+    setExportOpen(true);
   };
 
   const runConfirm = () => {
@@ -608,126 +627,69 @@ export default function TierMaker() {
     setConfirm(null);
   };
 
-  const confirmCopy = (() => {
-    if (!confirm) return { title: "", desc: "", label: "OK", danger: false };
-    if (confirm.kind === "reset") return { title: "Reset this list?", desc: "Every item returns to the preset ranking. Custom items stay in Unranked.", label: "Reset", danger: true };
-    const row = confirm.rowIndex != null ? activeState.rows[confirm.rowIndex] : undefined;
-    return { title: `Delete tier “${row?.l ?? ""}”?`, desc: `${row?.items.length ?? 0} items will move back to Unranked.`, label: "Delete tier", danger: true };
-  })();
+  const confirmCopy = confirmDialogCopy(confirm, activeState.rows);
 
-  const rankedCount = activeState.rows.reduce((a, r) => a + r.items.length, 0);
-  const totalCount = rankedCount + activeState.pool.length;
-  const pct = totalCount ? Math.round((rankedCount / totalCount) * 100) : 0;
   const previewNames = selectedIds.length <= NAME_PREVIEW ? selectedIds.map((id) => names[id]?.[0] ?? id) : [];
 
-  const onHandleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = e.target.value;
-    const handle = v ? (v.startsWith("@") ? v : "@" + v.replace(/^@+/, "")) : "";
+  const onNameInput = (value: string) => {
+    mutate((s) => ({ ...s, by: { ...s.by, name: value } }), "by-name");
+  };
+
+  const onHandleInput = (value: string) => {
+    const raw = value.trim().replace(/^@+/, "").replace(/\s+/g, "");
+    const handle = raw ? `@${raw}` : "";
     mutate((s) => ({ ...s, by: { ...s.by, handle } }), "by-handle");
   };
 
   return (
     <>
-      <header className={siteHeader}>
-        <Toolbar
-          presetId={activeState.p}
-          presets={PRESETS}
-          onPreset={switchPreset}
-          canUndo={canUndo}
-          canRedo={canRedo}
-          onUndo={undo}
-          onRedo={redo}
-          onAddTier={addRow}
-          onAddItem={() => setAddOpen(true)}
-          onShare={openShare}
-          onExport={runExport}
-          onDeal={dealUnranked}
-          onReset={() => setConfirm({ kind: "reset" })}
-          busy={busy}
-        />
-      </header>
-
-      <main id="board" className={cn(layoutShell, "flex-1 py-section")}>
-        {activeRemixable && (
-          <div className={selBanner}>
-            <span>Viewing {activeState.by.handle || activeState.by.name || "someone"}&apos;s tier list</span>
-            <Button className="ms-auto" onClick={remix}>
-              Remix this
-            </Button>
-          </div>
-        )}
-
-        <section className="mt-2 pb-1">
-          <p className="font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-mut">{preset.desc}</p>
-          <h1
-            className="mt-1 text-[clamp(1.5rem,2.4vw,1.75rem)] font-bold tracking-[-0.02em] leading-[1.15] outline-none"
-            role="textbox"
-            aria-label="List title"
-            contentEditable="plaintext-only"
-            suppressContentEditableWarning
-            spellCheck={false}
-            onBlur={(e) => {
-              const t = e.currentTarget.textContent?.trim() || "Untitled";
-              mutate((s) => ({ ...s, t }), "title");
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                e.currentTarget.blur();
-              }
-            }}
-          >
-            {activeState.t}
-          </h1>
-
-          <div className="mt-control flex flex-wrap items-end gap-x-group gap-y-control">
-            <div className="flex min-w-[min(100%,220px)] flex-1 items-center gap-control">
-              <div className="h-1 flex-1 overflow-hidden rounded-full bg-panel2" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Ranked progress">
-                <span className="block h-full rounded-full bg-lime transition-[width] duration-200 ease-out" style={{ width: `${pct}%` }} />
-              </div>
-              <span className="shrink-0 font-mono text-[11px] tabular-nums text-mut">
-                {rankedCount}/{totalCount} ranked
-              </span>
-            </div>
-
-            <div className="flex flex-wrap gap-inset [&_label]:min-w-[120px] [&_label]:max-w-[200px] [&_label]:flex-1 max-sm:[&_label]:max-w-none">
-              <FieldGroup>
-                <span className="sr-only">Your name</span>
-                <FieldGroupInput
-                  placeholder="Your name"
-                  autoComplete="name"
-                  value={activeState.by.name}
-                  onChange={(e) => {
-                    const name = e.target.value;
-                    mutate((s) => ({ ...s, by: { ...s.by, name } }), "by-name");
-                  }}
-                />
-              </FieldGroup>
-              <FieldGroup>
-                <span className="sr-only">Your handle</span>
-                <FieldGroupInput placeholder="@handle" autoComplete="username" value={activeState.by.handle} onChange={onHandleInput} />
-              </FieldGroup>
-            </div>
-          </div>
-        </section>
+      <SiteShell
+        header={
+          <Toolbar
+            canUndo={canUndo}
+            canRedo={canRedo}
+            onUndo={undo}
+            onRedo={redo}
+            onAddTier={addRow}
+            onAddItem={() => setAddOpen(true)}
+            onPostX={openPostX}
+            onExport={queueExport}
+            onReset={() => setConfirm({ kind: "reset" })}
+            busy={busy}
+          />
+        }
+        footer={<BoardFooter onLogoKey={() => setLogoKeyOpen(true)} />}
+      >
+        <h1 className="sr-only">AI Tier Maker</h1>
+        <BoardTitle value={activeState.t} onChange={onTitleChange} className="mb-group max-w-xl" />
 
         {selectedIds.length > 0 && <SelectionBar count={selectedIds.length} names={previewNames} rows={activeState.rows} onPlace={placeSelection} onClear={() => setSelectedIds([])} />}
 
-        <div key={activeState.p} className="board-switch mt-section">
+        <div key={activeState.p} className="board-switch">
           <Board
             state={activeState}
             names={names}
             factsOf={factsOf}
             selectedIds={selectedIds}
+            hasSelection={selectedIds.length > 0}
             poolFilter={query}
             catFilter={catFilter}
             onCatFilter={setCatFilter}
             poolHeader={
               <>
                 <FieldGroup>
-                  <Search size={14} strokeWidth={2} className="shrink-0 text-mut2" aria-hidden="true" />
-                  <span className="sr-only">Filter unranked items</span>
-                  <FieldGroupInput ref={searchRef} placeholder="Filter unranked  /" value={query} onChange={(e) => setQuery(e.target.value)} />
+                  <FieldLabel>
+                    <Search size={14} strokeWidth={2} className="shrink-0 text-mut2" aria-hidden="true" />
+                    <span className="sr-only">Filter unranked items</span>
+                    <FieldGroupInput
+                      ref={searchRef}
+                      name="filter"
+                      autoComplete="off"
+                      placeholder="Filter unranked…"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                    />
+                  </FieldLabel>
                   {query && (
                     <FieldClear aria-label="Clear filter" onClick={() => setQuery("")}>
                       <X size={12} strokeWidth={2} aria-hidden="true" />
@@ -735,22 +697,24 @@ export default function TierMaker() {
                   )}
                 </FieldGroup>
                 <FieldGroup>
-                  <Plus size={14} strokeWidth={2} className="shrink-0 text-mut2" aria-hidden="true" />
-                  <span className="sr-only">Quick add an item</span>
-                  <FieldGroupInput
-                    placeholder="Quick add, Enter"
-                    value={quickAdd}
-                    onChange={(e) => setQuickAdd(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
+                  <FieldLabel>
+                    <Plus size={14} strokeWidth={2} className="shrink-0 text-mut2" aria-hidden="true" />
+                    <span className="sr-only">Quick add an item</span>
+                    <FieldGroupInput
+                      name="quick-add"
+                      autoComplete="off"
+                      placeholder="Quick add…"
+                      value={quickAdd}
+                      onChange={(e) => setQuickAdd(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter") return;
                         const v = e.currentTarget.value.trim();
-                        if (v) {
-                          addQuick(v);
-                          setQuickAdd("");
-                        }
-                      }
-                    }}
-                  />
+                        if (!v) return;
+                        addQuick(v);
+                        setQuickAdd("");
+                      }}
+                    />
+                  </FieldLabel>
                 </FieldGroup>
               </>
             }
@@ -762,49 +726,47 @@ export default function TierMaker() {
             onZoneClick={placeSelection}
             onSendBack={sendBack}
             onRename={renameItem}
-            onRowLabel={onRowLabel}
+            onTierRename={onTierRename}
             onRowColor={onRowColor}
             onRowDelete={deleteRow}
             onRowMove={moveRow}
             onRemove={removeFromBoard}
-            midSlot={midAd ? <AdMidBlock ad={midAd} /> : undefined}
           />
         </div>
-
-        <AdSponsors ads={sponsors} />
-
-        <p className="mt-section font-mono text-[11px] leading-relaxed text-mut2">
-          Grip to drag · click name to rename · <span className={kbd}>⇧</span> range · tier chips or <span className={kbd}>1</span>–<span className={kbd}>9</span> to place
-          <span className="max-[1080px]:hidden">
-            {" "}· Filter <span className={kbd}>/</span> · Clear <span className={kbd}>Esc</span> · Unrank <span className={kbd}>Del</span> · Undo <span className={kbd}>Ctrl</span>{" "}
-            <span className={kbd}>Z</span>
-          </span>
-        </p>
-      </main>
+      </SiteShell>
 
       <AddItemDialog open={addOpen} onClose={() => setAddOpen(false)} onAdd={addCustom} />
+      <LogoKeyDialog open={logoKeyOpen} onClose={() => setLogoKeyOpen(false)} />
       <ConfirmDialog open={!!confirm} title={confirmCopy.title} desc={confirmCopy.desc} confirmLabel={confirmCopy.label} danger={confirmCopy.danger} onCancel={() => setConfirm(null)} onConfirm={runConfirm} />
-      {shareInfo && (
-        <ShareDialog
-          open={shareOpen}
-          onClose={() => setShareOpen(false)}
-          title={activeState.t}
-          text={shareInfo.text}
-          url={shareInfo.url}
-          ogUrl={shareInfo.og}
-          busy={busy}
-          onCopyLink={copyShareLink}
-          onNativeShare={nativeShare}
-          onPostX={postX}
-          onExport={runExport}
-        />
-      )}
+
+      <ExportDialog
+        open={exportOpen}
+        mode={exportMode}
+        busy={busy}
+        name={activeState.by.name}
+        handle={activeState.by.handle}
+        onClose={() => setExportOpen(false)}
+        onNameChange={onNameInput}
+        onHandleChange={onHandleInput}
+        onExport={() => runExport(exportMode)}
+      />
+
+      <PostXDialog
+        open={postXOpen}
+        busy={busy}
+        name={activeState.by.name}
+        handle={activeState.by.handle}
+        previewUrl={postPreviewUrl}
+        onClose={() => setPostXOpen(false)}
+        onNameChange={onNameInput}
+        onHandleChange={onHandleInput}
+        onPost={confirmPostX}
+      />
 
       <div
         className={cn(
-          "fixed inset-x-0 bottom-[calc(24px+env(safe-area-inset-bottom))] z-[99] mx-auto flex w-fit max-w-[92vw] translate-x-[-50%] left-1/2 items-center gap-2.5 rounded-full border border-line2 bg-panel2 px-4 py-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.08em] shadow-pop transition-[opacity,transform] duration-200",
-          toast ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0",
-          toast?.undo && "pointer-events-auto",
+          "pointer-events-none fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] left-1/2 z-[99] flex w-fit max-w-[92vw] -translate-x-1/2 items-center gap-2.5 rounded-full border border-line2 bg-panel2 px-4 py-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.08em] shadow-pop transition-[opacity,translate] duration-200 sm:bottom-[calc(24px+env(safe-area-inset-bottom))]",
+          toast ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0",
         )}
         role="status"
         aria-live="polite"
@@ -815,7 +777,7 @@ export default function TierMaker() {
             {toast.undo && (
               <button
                 type="button"
-                className="m-0 cursor-pointer rounded-full border border-lime bg-[color-mix(in_srgb,var(--color-lime)_12%,transparent)] px-2.5 py-1 font-inherit text-[10px] font-extrabold uppercase tracking-[0.06em] text-lime transition-[background-color,scale] duration-150 hover:bg-[color-mix(in_srgb,var(--color-lime)_22%,transparent)] active:scale-96"
+                className="pointer-events-auto m-0 cursor-pointer rounded-full border border-lime bg-[color-mix(in_srgb,var(--color-lime)_12%,transparent)] px-2.5 py-1 font-inherit text-[10px] font-extrabold uppercase tracking-[0.06em] text-lime transition-[background-color,scale] duration-150 hover:bg-[color-mix(in_srgb,var(--color-lime)_22%,transparent)] active:scale-96"
                 onClick={() => {
                   toast.undo!();
                   setToast(null);

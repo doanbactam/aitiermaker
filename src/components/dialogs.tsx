@@ -2,9 +2,13 @@
 
 import { useState } from "react";
 import { Dialog } from "@base-ui/react/dialog";
-import { Button, buttonClass } from "@/components/ui/button";
+import { Copy, Download } from "lucide-react";
+import { AttributionFields } from "@/components/attribution-fields";
+import { Mark } from "@/components/tile";
+import { Button } from "@/components/ui/button";
 import { FieldInput } from "@/components/ui/field";
 import { cn } from "@/lib/cn";
+import { getLogoDevKey, normalizeDomain, persistLogoDevKey } from "@/lib/logos";
 import { dialogBackdrop, dialogPanel, imgOutline } from "@/lib/ui-styles";
 
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
@@ -48,8 +52,6 @@ function fileToIcon(file: File): Promise<string> {
   });
 }
 
-const labelClass = "mt-3 block font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-mut first:mt-4";
-
 function Shell({
   open,
   onClose,
@@ -79,7 +81,7 @@ function Shell({
 
 function AddItemForm({ onClose, onAdd }: { onClose: () => void; onAdd: (name: string, domain: string) => void }) {
   const [name, setName] = useState("");
-  const [domain, setDomain] = useState("");
+  const [website, setWebsite] = useState("");
   const [icon, setIcon] = useState("");
   const [error, setError] = useState("");
   const [reading, setReading] = useState(false);
@@ -90,6 +92,7 @@ function AddItemForm({ onClose, onAdd }: { onClose: () => void; onAdd: (name: st
     setReading(true);
     try {
       setIcon(await fileToIcon(file));
+      setWebsite("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not use that image.");
     } finally {
@@ -99,71 +102,220 @@ function AddItemForm({ onClose, onAdd }: { onClose: () => void; onAdd: (name: st
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
-    onAdd(name.trim(), icon || domain.trim());
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const mark = icon || normalizeDomain(website);
+    onAdd(trimmed, mark);
     onClose();
   };
 
+  const domainPreview = !icon && website.trim() ? normalizeDomain(website) : "";
+  const hasLogoDev = Boolean(getLogoDevKey());
+
   return (
-    <form onSubmit={submit}>
-      <label className={labelClass} htmlFor="add-name">
+    <form className="mt-4" onSubmit={submit}>
+      <label className="sr-only" htmlFor="add-name">
         Name
       </label>
-      <FieldInput id="add-name" className="mt-1.5" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Perplexity Pro" required autoFocus />
+      <FieldInput id="add-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name…" required autoFocus />
 
-      <label className={labelClass} htmlFor="add-domain">
-        Website / domain
+      <label className="sr-only" htmlFor="add-website">
+        Website
       </label>
-      <FieldInput id="add-domain" className="mt-1.5" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="e.g. perplexity.ai" disabled={!!icon} />
+      <FieldInput
+        id="add-website"
+        className="mt-3"
+        value={website}
+        onChange={(e) => setWebsite(e.target.value)}
+        placeholder="Website… e.g. perplexity.ai"
+        disabled={Boolean(icon)}
+        autoComplete="url"
+        inputMode="url"
+      />
 
-      <p className={labelClass}>Or upload an image</p>
-      <div className="mt-1.5 flex items-center gap-2.5">
-        {icon && (
-          <span className="grid size-[34px] place-items-center rounded-[5px]">
-            <img src={icon} alt="" width={26} height={26} className={cn("rounded-[5px] object-cover", imgOutline)} />
-          </span>
-        )}
-        <label className={cn(buttonClass(), "cursor-pointer")}>
-          {reading ? "Reading…" : icon ? "Replace" : "Choose file"}
+      <div className="mt-3 flex min-h-[26px] items-center gap-2.5">
+        {icon ? (
+          <img src={icon} alt="" width={26} height={26} className={cn("rounded-[5px] object-cover", imgOutline)} />
+        ) : domainPreview ? (
+          <Mark mark={undefined} domain={domainPreview} name={name.trim() || domainPreview} size={26} />
+        ) : null}
+        <label className="font-mono text-[11px] font-semibold uppercase tracking-[0.06em] text-mut cursor-pointer transition-colors hover:text-fg">
+          {reading ? "Reading…" : icon ? "Replace image" : "Upload image"}
           <input
             type="file"
             accept="image/png,image/jpeg,image/webp,image/gif"
             className="sr-only"
+            disabled={reading}
             onChange={(e) => {
               pick(e.target.files?.[0]);
               e.target.value = "";
             }}
           />
         </label>
-        {icon && (
-          <Button variant="danger" onClick={() => setIcon("")}>
-            Remove
-          </Button>
-        )}
+        {icon ? (
+          <button type="button" className="font-mono text-[11px] text-mut2 transition-colors hover:text-fg" onClick={() => setIcon("")}>
+            Remove image
+          </button>
+        ) : null}
       </div>
-      <p className="mt-2 text-xs leading-relaxed text-mut2">
-        Stored with your list as a 64px icon. Uploaded images are left out of share links to keep them short.
-      </p>
-      {error && (
+
+      {!icon && website.trim() && !hasLogoDev ? (
+        <p className="mt-2 text-[11px] leading-relaxed text-mut2">No Logo.dev key — using public favicons. Add a key in the footer for sharper logos.</p>
+      ) : null}
+
+      {error ? (
         <p className="mt-2 text-xs text-danger" role="alert">
           {error}
         </p>
-      )}
+      ) : null}
 
       <div className="mt-5 flex justify-end gap-2">
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="primary" type="submit" disabled={reading}>
-          Add item
+        <Button variant="primary" type="submit" disabled={reading || !name.trim()}>
+          Add
         </Button>
       </div>
     </form>
   );
 }
 
+function LogoKeyForm({ onClose }: { onClose: () => void }) {
+  const [key, setKey] = useState(() => getLogoDevKey());
+
+  const save = (e: React.FormEvent) => {
+    e.preventDefault();
+    persistLogoDevKey(key);
+    onClose();
+  };
+
+  return (
+    <form className="mt-4" onSubmit={save}>
+      <label className="sr-only" htmlFor="logo-key">
+        Logo.dev publishable key
+      </label>
+      <FieldInput id="logo-key" value={key} onChange={(e) => setKey(e.target.value)} placeholder="pk_…" autoComplete="off" spellCheck={false} />
+      <div className="mt-5 flex justify-end gap-2">
+        <Button
+          type="button"
+          onClick={() => {
+            persistLogoDevKey("");
+            onClose();
+          }}
+        >
+          Clear
+        </Button>
+        <Button variant="primary" type="submit">
+          Save
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+export function LogoKeyDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <Shell
+      open={open}
+      onClose={onClose}
+      title="Logo.dev key"
+      desc="Optional publishable key (pk_…) for brand logos from a website. Without it, logos fall back to public favicon services."
+    >
+      {open ? <LogoKeyForm key="logo-key-form" onClose={onClose} /> : null}
+    </Shell>
+  );
+}
+
 export function AddItemDialog({ open, onClose, onAdd }: { open: boolean; onClose: () => void; onAdd: (name: string, domain: string) => void }) {
   return (
-    <Shell open={open} onClose={onClose} title="Add custom item" desc="Anything with a website gets a logo. Upload an image for anything that does not, or leave both blank for a letter mark.">
+    <Shell open={open} onClose={onClose} title="Add item" desc="Name required. Paste a website for a logo, upload an image, or skip both for a letter mark.">
       {open ? <AddItemForm onClose={onClose} onAdd={onAdd} /> : null}
+    </Shell>
+  );
+}
+
+export function ExportDialog({
+  open,
+  mode,
+  busy,
+  name,
+  handle,
+  onClose,
+  onNameChange,
+  onHandleChange,
+  onExport,
+}: {
+  open: boolean;
+  mode: "download" | "copy";
+  busy?: boolean;
+  name: string;
+  handle: string;
+  onClose: () => void;
+  onNameChange: (value: string) => void;
+  onHandleChange: (value: string) => void;
+  onExport: () => void;
+}) {
+  const label = mode === "download" ? "Download PNG" : "Copy PNG";
+  return (
+    <Shell open={open} onClose={onClose} title="Export PNG" desc="Add @handle for credit on the image — helps people find you when it spreads.">
+      <AttributionFields name={name} handle={handle} onNameChange={onNameChange} onHandleChange={onHandleChange} />
+      <div className="mt-5 flex justify-end gap-2">
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="primary" disabled={busy} onClick={onExport}>
+          {mode === "download" ? <Download size={14} strokeWidth={2} aria-hidden="true" /> : <Copy size={14} strokeWidth={2} aria-hidden="true" />}
+          {label}
+        </Button>
+      </div>
+    </Shell>
+  );
+}
+
+export function PostXDialog({
+  open,
+  busy,
+  name,
+  handle,
+  previewUrl,
+  onClose,
+  onNameChange,
+  onHandleChange,
+  onPost,
+}: {
+  open: boolean;
+  busy?: boolean;
+  name: string;
+  handle: string;
+  previewUrl: string | null;
+  onClose: () => void;
+  onNameChange: (value: string) => void;
+  onHandleChange: (value: string) => void;
+  onPost: () => void;
+}) {
+  return (
+    <Shell
+      open={open}
+      onClose={onClose}
+      title="Post on X"
+      desc="X can’t auto-attach images from a link. We’ll download your PNG and open compose — then tap the image button and pick that file."
+    >
+      <div className="mt-4 overflow-hidden rounded-md border border-line bg-panel">
+        {previewUrl ? (
+          <img src={previewUrl} alt="Tier list preview" className={cn("block w-full", imgOutline)} />
+        ) : (
+          <div className="skeleton aspect-[1200/630] w-full" aria-busy="true" aria-label="Rendering preview" />
+        )}
+      </div>
+      <div className="mt-3.5">
+        <AttributionFields name={name} handle={handle} onNameChange={onNameChange} onHandleChange={onHandleChange} />
+      </div>
+      <div className="mt-5 flex justify-end gap-2">
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="primary" disabled={busy || !previewUrl} onClick={onPost}>
+          <span className="text-[13px] font-bold leading-none" aria-hidden="true">
+            𝕏
+          </span>
+          Download PNG & open X
+        </Button>
+      </div>
     </Shell>
   );
 }

@@ -1,9 +1,12 @@
 import type { TierState } from "@/lib/types";
 import { ITEMS } from "@/data/catalog";
 import { MARKS } from "@/data/icons";
-import { imageSources, fallbackSource, fbColor } from "@/lib/logos";
+import { imageSources, fallbackSource, fbColor, isLogoDevUrl } from "@/lib/logos";
+import { inkOnDark } from "@/lib/contrast";
+import { pngFooterCta, publicShareHost } from "@/lib/share";
+import { THEME_DARK, TIER_INK_CANVAS } from "@/lib/theme-colors";
 
-const BG = "#0a0a0b", CHIP = "#17171c", LINE = "#232329", FG = "#f2f2f0", MUT = "#8b8f98";
+const { bg: BG, panel2: CHIP, line: LINE, fg: FG, mut: MUT, lime: LIME, logoBg: LOGO_BG } = THEME_DARK;
 
 function rr(x: CanvasRenderingContext2D, a: number, b: number, w: number, h: number, r: number) {
   x.beginPath();
@@ -26,33 +29,42 @@ function loadImage(value: string): Promise<HTMLImageElement | null> {
       res(null);
       return;
     }
-    let i = 0;
     const img = new Image();
     img.crossOrigin = "anonymous";
+    const tryNext = (index: number) => {
+      if (index >= list.length) {
+        clearTimeout(timer);
+        res(null);
+        return;
+      }
+      img.referrerPolicy = isLogoDevUrl(list[index]) ? "origin" : "";
+      img.src = list[index];
+    };
     const timer = setTimeout(() => res(null), 4000);
+    let i = 0;
     img.onload = () => {
       clearTimeout(timer);
       res(img);
     };
     img.onerror = () => {
-      if (++i < list.length) img.src = list[i];
-      else {
-        clearTimeout(timer);
-        res(null);
-      }
+      i += 1;
+      tryNext(i);
     };
-    img.src = list[0];
+    tryNext(0);
   });
 }
 
 function toCanvas(state: TierState, names: Record<string, [string, string]>, marks: Record<string, string>): Promise<HTMLCanvasElement> {
-  const W = 1200, PAD = 40, LW = 140, CH = 44, GAP = 8;
+  const W = 1200, PAD = 40, LW = 140, CH = 44, GAP = 8, FOOT = 56;
+  const siteHost = publicShareHost();
+  const ranked = state.rows.reduce((n, r) => n + r.items.length, 0);
   return new Promise(async (resolve) => {
     const cv = document.createElement("canvas");
     const x = cv.getContext("2d")!;
     const fontChip = "600 13px system-ui";
     const fontTitle = "800 46px system-ui";
-    const fontBy = "600 13px monospace";
+    const fontMeta = "600 13px monospace";
+    const fontBadge = "700 12px system-ui";
     x.font = fontChip;
     const tw = (s: string) => x.measureText(s).width;
 
@@ -81,21 +93,47 @@ function toCanvas(state: TierState, names: Record<string, [string, string]>, mar
 
     const headH = 128;
     const bodyH = state.rows.reduce((a, _, i) => a + Math.max(1, rowChunks[i].length) * (CH + GAP) + GAP + 10, 0);
-    const H = headH + bodyH + 56;
+    const H = headH + bodyH + FOOT;
     cv.width = W;
     cv.height = H;
 
     x.fillStyle = BG;
     x.fillRect(0, 0, W, H);
 
-    x.fillStyle = "#c8f04b";
+    if (ranked > 0) {
+      x.font = fontBadge;
+      const badge = `${ranked} ranked`;
+      const badgeW = tw(badge) + 24;
+      const badgeX = W - PAD - badgeW;
+      x.fillStyle = CHIP;
+      rr(x, badgeX, 34, badgeW, 30, 15);
+      x.fill();
+      x.strokeStyle = LIME;
+      x.lineWidth = 1.5;
+      rr(x, badgeX + 0.75, 34.75, badgeW - 1.5, 28.5, 15);
+      x.stroke();
+      x.fillStyle = LIME;
+      x.textAlign = "center";
+      x.textBaseline = "middle";
+      x.fillText(badge, badgeX + badgeW / 2, 49);
+      x.textBaseline = "alphabetic";
+      x.textAlign = "left";
+    }
+
+    x.fillStyle = LIME;
     x.fillRect(PAD, 44, 12, 12);
     x.fillStyle = FG;
     x.font = fontTitle;
     x.textBaseline = "alphabetic";
-    x.fillText((state.t || "AI Tier List").toUpperCase().slice(0, 38), PAD + 22, 58);
+    const title = (state.t || "AI Tier List").toUpperCase();
+    const titleMax = ranked > 0 ? W - PAD * 2 - 140 : W - PAD * 2;
+    let titleDraw = title;
+    while (titleDraw.length > 1 && tw(titleDraw) > titleMax) titleDraw = titleDraw.slice(0, -1);
+    if (titleDraw.length < title.length) titleDraw = titleDraw.slice(0, -1) + "…";
+    x.fillText(titleDraw, PAD + 22, 58);
+
     x.fillStyle = MUT;
-    x.font = fontBy;
+    x.font = fontMeta;
     const by = [state.by.name, state.by.handle].filter(Boolean).join(" · ");
     x.fillText((by ? `BY ${by.toUpperCase()} — ` : "") + "AITIERMAKER", PAD + 22, 82);
 
@@ -110,12 +148,9 @@ function toCanvas(state: TierState, names: Record<string, [string, string]>, mar
       x.fillStyle = r.c;
       rr(x, PAD, y, LW, rh, 10);
       x.fill();
-      x.fillStyle = "rgba(0,0,0,.82)";
+      x.fillStyle = inkOnDark(r.c) ? TIER_INK_CANVAS.onDark : TIER_INK_CANVAS.onLight;
       x.font = "900 34px system-ui";
       x.fillText(r.l, PAD + LW / 2, y + rh / 2 + 2);
-      x.font = "700 9px monospace";
-      x.fillStyle = "rgba(0,0,0,.6)";
-      x.fillText(r.sub.toUpperCase(), PAD + LW / 2, y + rh / 2 + 20);
 
       let cy = y;
       for (const chunk of rowChunks[ri]) {
@@ -143,7 +178,7 @@ function toCanvas(state: TierState, names: Record<string, [string, string]>, mar
             x.fill(new Path2D(m.path));
             x.restore();
           } else if (favicons[id]) {
-            x.fillStyle = "#ffffff";
+            x.fillStyle = LOGO_BG;
             rr(x, mx, my, 22, 22, 5);
             x.fill();
             const im = favicons[id]!;
@@ -158,7 +193,7 @@ function toCanvas(state: TierState, names: Record<string, [string, string]>, mar
             x.beginPath();
             x.arc(mx + 11, my + 11, 11, 0, 7);
             x.fill();
-            x.fillStyle = "#101013";
+            x.fillStyle = CHIP;
             x.font = "800 12px system-ui";
             x.fillText(fbSrc[0].toUpperCase(), mx + 11, my + 15.5);
           }
@@ -173,26 +208,16 @@ function toCanvas(state: TierState, names: Record<string, [string, string]>, mar
       y += rh + GAP + 2;
     });
 
-    x.fillStyle = MUT;
-    x.font = "600 12px monospace";
-    x.textAlign = "left";
-    x.fillText(`RANK YOURS → ${location.host}`, PAD, H - 24);
-    x.textAlign = "right";
-    x.fillText("AITIERMAKER", W - PAD, H - 24);
+    x.fillStyle = LIME;
+    x.fillRect(0, H - FOOT, W, FOOT);
+    x.fillStyle = BG;
+    x.font = "800 15px system-ui";
+    x.textAlign = "center";
+    x.textBaseline = "middle";
+    x.fillText(pngFooterCta(siteHost).toUpperCase(), W / 2, H - FOOT / 2);
+    x.textBaseline = "alphabetic";
     x.textAlign = "left";
     resolve(cv);
-  });
-}
-
-export async function exportPNG(state: TierState, names: Record<string, [string, string]>) {
-  const cv = await toCanvas(state, names, itemMarks(state));
-  cv.toBlob((b) => {
-    if (!b) return;
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(b);
-    a.download = (state.t || "ai-tier-list").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + ".png";
-    a.click();
-    URL.revokeObjectURL(a.href);
   });
 }
 
@@ -204,15 +229,83 @@ function itemMarks(state: TierState): Record<string, string> {
   return out;
 }
 
-export async function copyPNG(state: TierState, names: Record<string, [string, string]>): Promise<boolean> {
+function pngFilename(state: TierState): string {
+  return (state.t || "ai-tier-list").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + ".png";
+}
+
+async function pngBlob(state: TierState, names: Record<string, [string, string]>): Promise<Blob | null> {
+  const cv = await toCanvas(state, names, itemMarks(state));
+  return new Promise((res) => cv.toBlob(res));
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function writePngClipboard(blob: Blob): Promise<boolean> {
   try {
     if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) return false;
-    const cv = await toCanvas(state, names, itemMarks(state));
-    const blob = await new Promise<Blob | null>((res) => cv.toBlob(res));
-    if (!blob) return false;
     await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
     return true;
   } catch {
     return false;
   }
+}
+
+export type PngShareResult = "shared" | "downloaded" | "failed";
+
+/**
+ * Hand PNG to the user for an X post.
+ * Mobile: Web Share with the image file when the OS supports it.
+ * Desktop: always download — X's web intent cannot attach media, and clipboard
+ * paste into the compose box is unreliable across browsers.
+ */
+export async function sharePNGForX(
+  state: TierState,
+  names: Record<string, [string, string]>,
+  caption: string,
+): Promise<PngShareResult> {
+  const blob = await pngBlob(state, names);
+  if (!blob) return "failed";
+
+  const file = new File([blob], pngFilename(state), { type: "image/png" });
+  if (typeof navigator.share === "function" && typeof navigator.canShare === "function") {
+    try {
+      const payload = { files: [file], text: caption };
+      if (navigator.canShare(payload)) {
+        await navigator.share(payload);
+        return "shared";
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return "failed";
+    }
+  }
+
+  downloadBlob(blob, pngFilename(state));
+  return "downloaded";
+}
+
+export async function renderPngObjectUrl(
+  state: TierState,
+  names: Record<string, [string, string]>,
+): Promise<string | null> {
+  const blob = await pngBlob(state, names);
+  if (!blob) return null;
+  return URL.createObjectURL(blob);
+}
+
+export async function exportPNG(state: TierState, names: Record<string, [string, string]>) {
+  const blob = await pngBlob(state, names);
+  if (!blob) return;
+  downloadBlob(blob, pngFilename(state));
+}
+
+export async function copyPNG(state: TierState, names: Record<string, [string, string]>): Promise<boolean> {
+  const blob = await pngBlob(state, names);
+  if (!blob) return false;
+  return writePngClipboard(blob);
 }

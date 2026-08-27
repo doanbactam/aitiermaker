@@ -18,10 +18,17 @@ export function readThemeMode(): ThemeMode {
 
 export function applyTheme(mode: ThemeMode) {
   const dark = resolveDark(mode);
+  // A theme flip recolors nearly every element at once; without this every
+  // color transition fires together and the switch smears instead of snapping.
+  const freeze = document.createElement("style");
+  freeze.appendChild(document.createTextNode("*,*::before,*::after{transition:none!important}"));
+  document.head.appendChild(freeze);
   document.documentElement.classList.toggle("dark", dark);
   document.documentElement.classList.toggle("light", !dark);
   document.documentElement.style.colorScheme = dark ? "dark" : "light";
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#09090b" : "#f6f6f4");
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "oklch(0.141 0.008 286)" : "oklch(0.972 0.003 106)");
+  void document.body.offsetHeight;
+  requestAnimationFrame(() => freeze.remove());
 }
 
 export function persistTheme(mode: ThemeMode) {

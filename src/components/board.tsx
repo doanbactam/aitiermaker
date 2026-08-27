@@ -3,7 +3,7 @@
 import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, TouchSensor, closestCorners, pointerWithin, rectIntersection, useSensor, useSensors, useDroppable, MeasuringStrategy } from "@dnd-kit/core";
 import type { CollisionDetection, DragEndEvent, DragOverEvent, DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, rectSortingStrategy, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import { Fragment, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { CatalogItem, TierState } from "@/lib/types";
@@ -11,6 +11,7 @@ import type { Category } from "@/lib/types";
 import { ITEMS } from "@/data/catalog";
 import { Tile, Mark, type SelectOpts } from "@/components/tile";
 import { cn } from "@/lib/cn";
+import { inkOnDark, tierRingClass } from "@/lib/contrast";
 import { chipBase, chipOn } from "@/lib/ui-styles";
 
 export type ContainerId = string;
@@ -25,22 +26,6 @@ export const CAT_FILTERS: readonly [Category | "all", string][] = [
   ["local", "Local"],
   ["infra", "Infra"],
 ];
-
-/**
- * WCAG relative luminance. Tier colours come from a free colour picker, so the
- * label has to decide its own ink — hardcoded black text disappears the moment
- * someone picks a dark tier.
- */
-function relativeLuminance(hex: string): number {
-  const h = hex.replace("#", "");
-  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
-  if (full.length !== 6) return 1;
-  const channel = (i: number) => {
-    const v = parseInt(full.slice(i, i + 2), 16) / 255;
-    return Number.isNaN(v) ? 1 : v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-  };
-  return 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
-}
 
 interface BoardProps {
   state: TierState;
@@ -57,14 +42,14 @@ interface BoardProps {
   onSelect: (id: string, opts: SelectOpts) => void;
   onSelectMany: (ids: string[]) => void;
   onZoneClick: (container: ContainerId, beforeId?: string) => void;
+  hasSelection: boolean;
   onSendBack: (id: string) => void;
   onRename: (id: string, name: string) => void;
   onRemove: (id: string) => void;
-  onRowLabel: (i: number, field: "l" | "sub", value: string) => void;
+  onTierRename: (i: number, value: string) => void;
   onRowColor: (i: number, color: string) => void;
   onRowDelete: (i: number) => void;
   onRowMove: (i: number, dir: -1 | 1) => void;
-  midSlot?: React.ReactNode;
 }
 
 const dropZoneClass = (isOver: boolean) =>
@@ -74,55 +59,63 @@ const dropZoneClass = (isOver: boolean) =>
   );
 
 const actionBtn =
-  "grid size-7 place-items-center rounded border-0 bg-transparent text-mut transition-[background,color,scale] duration-150 hover:bg-[color-mix(in_srgb,var(--color-fg)_8%,transparent)] hover:text-fg active:scale-96 disabled:cursor-default disabled:opacity-30 disabled:active:scale-100";
+  "grid size-7 place-items-center rounded border-0 bg-transparent text-mut transition-[background,color,scale] duration-150 enabled:hover:bg-[color-mix(in_srgb,var(--color-fg)_8%,transparent)] enabled:hover:text-fg active:scale-96 disabled:cursor-default disabled:opacity-30 disabled:active:scale-100";
 
-function RowLabel({ i, row, onLabel }: { i: number; row: TierState["rows"][number]; onLabel: BoardProps["onRowLabel"] }) {
+function RowLabel({
+  i,
+  row,
+  onRename,
+  hasSelection,
+  onPlace,
+}: {
+  i: number;
+  row: TierState["rows"][number];
+  onRename: BoardProps["onTierRename"];
+  hasSelection: boolean;
+  onPlace: BoardProps["onZoneClick"];
+}) {
   const long = row.l.length > 2;
-  const darkChip = relativeLuminance(row.c) < 0.36;
-  const ring = darkChip ? "focus:shadow-[0_0_0_2px_rgba(255,255,255,0.45)]" : "focus:shadow-[0_0_0_2px_rgba(0,0,0,0.28)]";
+  const darkChip = inkOnDark(row.c);
+  const ring = tierRingClass(darkChip);
   return (
-    <div className="group/tlabel relative flex w-24 max-sm:w-[72px] max-sm:px-1 max-sm:py-2 shrink-0 cursor-default flex-col items-center justify-center gap-0.5 px-2 py-2.5" style={{ background: row.c }}>
+    <div
+      className={cn(
+        "group/tlabel relative flex w-20 shrink-0 flex-col items-center justify-center px-1.5 py-2 max-sm:w-14 max-sm:px-1 max-sm:py-1.5 sm:w-24 sm:px-2 sm:py-2.5",
+        hasSelection ? "cursor-pointer" : "cursor-default",
+      )}
+      style={{ background: row.c }}
+      onClick={hasSelection ? () => onPlace(`row-${i}`) : undefined}
+      title={hasSelection ? `Place selection in tier ${row.l}` : undefined}
+    >
       <span
         className={cn(
-          "z-1 max-w-full cursor-text text-center font-black leading-none outline-none [overflow-wrap:anywhere] rounded-[3px] px-0.5",
+          "z-1 max-w-full text-center font-black leading-none [overflow-wrap:anywhere] rounded-[3px] px-0.5",
           darkChip ? "text-white/92" : "text-black/85",
           ring,
           long ? "text-[13px] leading-snug tracking-normal" : "text-[28px] max-sm:text-[22px]",
+          hasSelection ? "pointer-events-none" : "cursor-text outline-none",
         )}
-        role="textbox"
-        aria-label={`Tier ${i + 1} name`}
-        contentEditable="plaintext-only"
+        role={hasSelection ? undefined : "textbox"}
+        aria-label={hasSelection ? undefined : `Tier ${i + 1} name`}
+        contentEditable={hasSelection ? false : "plaintext-only"}
         suppressContentEditableWarning
         spellCheck={false}
-        title="Click to rename tier"
-        onInput={(e) => e.currentTarget.classList.toggle("text-[13px]", (e.currentTarget.textContent?.length ?? 0) > 2)}
-        onBlur={(e) => onLabel(i, "l", e.currentTarget.textContent?.trim() || "?")}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            e.currentTarget.blur();
-          }
-        }}
+        title={hasSelection ? undefined : "Click to rename tier"}
+        onClick={hasSelection ? (e) => e.stopPropagation() : undefined}
+        onInput={hasSelection ? undefined : (e) => e.currentTarget.classList.toggle("text-[13px]", (e.currentTarget.textContent?.length ?? 0) > 2)}
+        onBlur={hasSelection ? undefined : (e) => onRename(i, e.currentTarget.textContent?.trim() || "?")}
+        onKeyDown={
+          hasSelection
+            ? undefined
+            : (e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                }
+              }
+        }
       >
         {row.l}
-      </span>
-      <span
-        className={cn(
-          "z-1 max-w-full min-h-0 cursor-text text-center font-mono text-[8px] font-bold uppercase tracking-[0.08em] outline-none [overflow-wrap:anywhere] rounded-[3px] px-0.5 max-sm:hidden",
-          darkChip ? "text-white/65" : "text-black/50",
-          ring,
-          !row.sub && "empty:before:pointer-events-none empty:before:opacity-0 empty:before:content-[attr(data-ph)] group-hover/tlabel:empty:before:opacity-35 group-focus-within/tlabel:empty:before:opacity-35",
-        )}
-        role="textbox"
-        aria-label={`Tier ${row.l} subtitle`}
-        contentEditable="plaintext-only"
-        suppressContentEditableWarning
-        spellCheck={false}
-        data-ph="label"
-        title="Click to edit label"
-        onBlur={(e) => onLabel(i, "sub", e.currentTarget.textContent?.trim() || "")}
-      >
-        {row.sub}
       </span>
     </div>
   );
@@ -151,7 +144,7 @@ function RowActions({ i, total, row, onColor, onDelete, onMoveRow }: { i: number
       <button type="button" className={actionBtn} aria-label={`Move tier ${row.l} down`} disabled={i === total - 1} onClick={() => onMoveRow(i, 1)}>
         <ChevronDown size={12} strokeWidth={2} aria-hidden="true" />
       </button>
-      <button type="button" className={cn(actionBtn, "hover:bg-[color-mix(in_srgb,#ff6b6b_18%,transparent)] hover:text-[#ffb4b4]")} aria-label={`Delete tier ${row.l}`} onClick={() => onDelete(i)}>
+      <button type="button" className={cn(actionBtn, "hover:bg-[color-mix(in_oklch,var(--color-danger)_18%,transparent)] hover:text-[color-mix(in_oklch,var(--color-danger)_72%,var(--color-fg))]")} aria-label={`Delete tier ${row.l}`} onClick={() => onDelete(i)}>
         <X size={12} strokeWidth={2} aria-hidden="true" />
       </button>
     </div>
@@ -159,7 +152,7 @@ function RowActions({ i, total, row, onColor, onDelete, onMoveRow }: { i: number
 }
 
 export function Board(props: BoardProps) {
-  const { state, names, factsOf, selectedIds, poolFilter, catFilter, onCatFilter, poolHeader, onMove, onMoveMany, onReorder, onSelect, onSelectMany, onZoneClick, onSendBack, onRename, onRemove, onRowLabel, onRowColor, onRowDelete, onRowMove, midSlot } = props;
+  const { state, names, factsOf, selectedIds, poolFilter, catFilter, onCatFilter, poolHeader, onMove, onMoveMany, onReorder, onSelect, onSelectMany, onZoneClick, hasSelection, onSendBack, onRename, onRemove, onTierRename, onRowColor, onRowDelete, onRowMove } = props;
   const q = poolFilter.trim().toLowerCase();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragGroup, setDragGroup] = useState<string[]>([]);
@@ -277,7 +270,6 @@ export function Board(props: BoardProps) {
     return okQ && okC;
   };
   const visiblePool = state.pool.filter(matchesFilter);
-  const midAfterIndex = midSlot ? Math.floor((state.rows.length - 1) / 2) : -1;
 
   return (
     <DndContext
@@ -296,14 +288,11 @@ export function Board(props: BoardProps) {
     >
       <section className="flex flex-col gap-control" aria-label="Tier rows">
         {state.rows.map((row, i) => (
-          <Fragment key={`row-${i}`}>
-            <Row id={`row-${i}`} rowIndex={i} row={row} empty={row.items.length === 0} rowsTotal={state.rows.length} onZoneClick={onZoneClick} onRowLabel={onRowLabel} onRowColor={onRowColor} onRowDelete={onRowDelete} onRowMove={onRowMove}>
-              <SortableContext items={row.items} strategy={rectSortingStrategy}>
-                {row.items.map((id) => renderTile(id))}
-              </SortableContext>
-            </Row>
-            {i === midAfterIndex ? midSlot : null}
-          </Fragment>
+          <Row key={`row-${i}`} id={`row-${i}`} rowIndex={i} row={row} empty={row.items.length === 0} rowsTotal={state.rows.length} hasSelection={hasSelection} onZoneClick={onZoneClick} onTierRename={onTierRename} onRowColor={onRowColor} onRowDelete={onRowDelete} onRowMove={onRowMove}>
+            <SortableContext items={row.items} strategy={rectSortingStrategy}>
+              {row.items.map((id) => renderTile(id))}
+            </SortableContext>
+          </Row>
         ))}
       </section>
 
@@ -313,15 +302,15 @@ export function Board(props: BoardProps) {
         header={poolHeader}
         toolbar={
           <>
-            <div className="flex flex-wrap gap-inset" role="group" aria-label="Filter by category">
+            <div className="-mx-1 flex min-w-0 flex-1 gap-inset overflow-x-auto px-1 pb-1 max-sm:flex-nowrap sm:flex-wrap sm:overflow-visible sm:pb-0" role="group" aria-label="Filter by category">
               {CAT_FILTERS.map(([c, label]) => (
-                <button key={c} type="button" className={cn(chipBase, catFilter === c && chipOn)} aria-pressed={catFilter === c} onClick={() => onCatFilter(c)}>
+                <button key={c} type="button" className={cn(chipBase, "shrink-0", catFilter === c && chipOn)} aria-pressed={catFilter === c} onClick={() => onCatFilter(c)}>
                   {label}
                 </button>
               ))}
             </div>
-            <Button className="ms-auto" disabled={!visiblePool.length} onClick={() => onSelectMany(visiblePool)}>
-              Select shown{visiblePool.length ? ` (${visiblePool.length})` : ""}
+            <Button className="w-full shrink-0 sm:ms-auto sm:w-auto" disabled={!visiblePool.length} onClick={() => onSelectMany(visiblePool)}>
+              Select all shown{visiblePool.length ? ` (${visiblePool.length})` : ""}
             </Button>
           </>
         }
@@ -359,11 +348,11 @@ export function Board(props: BoardProps) {
   );
 }
 
-function Row({ id, rowIndex, row, rowsTotal, empty, children, onZoneClick, onRowLabel, onRowColor, onRowDelete, onRowMove }: { id: ContainerId; rowIndex: number; row: TierState["rows"][number]; rowsTotal: number; empty: boolean; children: React.ReactNode; onZoneClick: BoardProps["onZoneClick"]; onRowLabel: BoardProps["onRowLabel"]; onRowColor: BoardProps["onRowColor"]; onRowDelete: BoardProps["onRowDelete"]; onRowMove: BoardProps["onRowMove"] }) {
+function Row({ id, rowIndex, row, rowsTotal, empty, children, hasSelection, onZoneClick, onTierRename, onRowColor, onRowDelete, onRowMove }: { id: ContainerId; rowIndex: number; row: TierState["rows"][number]; rowsTotal: number; empty: boolean; children: React.ReactNode; hasSelection: boolean; onZoneClick: BoardProps["onZoneClick"]; onTierRename: BoardProps["onTierRename"]; onRowColor: BoardProps["onRowColor"]; onRowDelete: BoardProps["onRowDelete"]; onRowMove: BoardProps["onRowMove"] }) {
   const { setNodeRef, isOver } = useDroppable({ id, data: { type: "container" } });
   return (
     <div ref={setNodeRef} className="group/trow flex overflow-hidden rounded-md border border-line bg-panel transition-[border-color] duration-150 focus-within:border-line2" data-row={rowIndex}>
-      <RowLabel i={rowIndex} row={row} onLabel={onRowLabel} />
+      <RowLabel i={rowIndex} row={row} onRename={onTierRename} hasSelection={hasSelection} onPlace={onZoneClick} />
       <div className="relative min-w-0 flex-1">
         <RowActions i={rowIndex} total={rowsTotal} row={row} onColor={onRowColor} onDelete={onRowDelete} onMoveRow={onRowMove} />
         <div
@@ -384,7 +373,7 @@ function Row({ id, rowIndex, row, rowsTotal, empty, children, onZoneClick, onRow
 function Pool({ zoneId, children, onZoneClick, header, toolbar, emptyLabel, shown, total }: { zoneId: ContainerId; children: React.ReactNode; onZoneClick: BoardProps["onZoneClick"]; header?: React.ReactNode; toolbar?: React.ReactNode; emptyLabel?: string; shown: number; total: number }) {
   const { setNodeRef, isOver } = useDroppable({ id: zoneId, data: { type: "container" } });
   return (
-    <section className="mt-group rounded-md border border-line bg-panel p-group">
+    <section className="mt-group rounded-md border border-line bg-panel p-control sm:p-group">
       <div className="mb-control flex flex-wrap items-center gap-x-group gap-y-control">
         <div className="flex shrink-0 items-center gap-inset">
           <h2 className="font-mono text-[13px] font-bold uppercase tracking-[0.08em] text-mut">Unranked</h2>
@@ -393,9 +382,13 @@ function Pool({ zoneId, children, onZoneClick, header, toolbar, emptyLabel, show
             {shown !== total ? ` / ${total}` : ""}
           </span>
         </div>
-        {header && <div className="flex min-w-[min(100%,280px)] max-sm:w-full flex-1 flex-wrap gap-inset [&>label]:min-w-[140px] [&>label]:flex-1">{header}</div>}
+        {header && (
+          <div className="flex w-full min-w-0 flex-col gap-inset sm:min-w-[min(100%,280px)] sm:flex-1 sm:flex-row sm:flex-wrap [&_.field-group]:w-full sm:[&_.field-group]:min-w-[140px] sm:[&_.field-group]:flex-1">
+            {header}
+          </div>
+        )}
       </div>
-      {toolbar && <div className="mb-control flex flex-wrap items-center gap-control">{toolbar}</div>}
+      {toolbar && <div className="mb-control flex flex-col gap-control sm:flex-row sm:flex-wrap sm:items-center">{toolbar}</div>}
       <div
         ref={setNodeRef}
         className={cn(dropZoneClass(isOver), "min-h-[86px]!")}

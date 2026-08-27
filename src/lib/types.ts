@@ -31,8 +31,6 @@ export interface TierState {
   /** User-edited display names for catalog items (id → name). */
   labels?: Record<string, string>;
   by: { name: string; handle: string };
-  /** handle/name of the creator whose shared list this was remixed from */
-  src?: string;
 }
 
 export interface Preset {

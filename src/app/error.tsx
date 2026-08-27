@@ -1,9 +1,11 @@
 "use client";
 
-import Link from "next/link";
+import { BoardFooter } from "@/components/board-footer";
+import { BrandLogo } from "@/components/brand-logo";
+import { SiteShell } from "@/components/site-shell";
 import { Button } from "@/components/ui/button";
-import { brandMark, layoutShell, siteHeader } from "@/lib/ui-styles";
 import { cn } from "@/lib/cn";
+import { layoutShell } from "@/lib/ui-styles";
 
 export default function Error({
   error,
@@ -13,16 +15,16 @@ export default function Error({
   retry: () => void;
 }) {
   return (
-    <>
-      <header className={siteHeader}>
-        <div className={cn(layoutShell, "flex items-center py-3")}>
-          <Link href="/" className="inline-flex items-center gap-2.5 text-[15px] font-extrabold tracking-tight text-inherit no-underline">
-            <span className={brandMark} aria-hidden="true" />
-            AI TIER MAKER<span className="text-lime">.</span>
-          </Link>
+    <SiteShell
+      header={
+        <div className={cn(layoutShell, "flex min-h-(--site-header-h) items-center py-2")}>
+          <BrandLogo />
         </div>
-      </header>
-      <main className="grid min-h-[70vh] place-items-center px-5 py-10 text-center">
+      }
+      footer={<BoardFooter />}
+      mainId="content"
+    >
+      <div className="grid min-h-[50vh] place-items-center py-section text-center">
         <div>
           <p className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-lime">Error</p>
           <h1 className="mt-2 text-[clamp(28px,5vw,44px)] font-black tracking-tight">Something broke</h1>
@@ -31,7 +33,7 @@ export default function Error({
             Try again
           </Button>
         </div>
-      </main>
-    </>
+      </div>
+    </SiteShell>
   );
 }

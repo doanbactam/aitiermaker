@@ -1,26 +1,26 @@
 import { ImageResponse } from "next/og";
-import { allItems, decodeState, seed } from "@/lib/state";
+import { inkOnDark } from "@/lib/contrast";
+import { pngFooterCta } from "@/lib/share";
+import { allItems, seed } from "@/lib/state";
+import { THEME_DARK, TIER_INK_CANVAS } from "@/lib/theme-colors";
+import type { TierState } from "@/lib/types";
 
 export const contentType = "image/png";
 
 const MAX_PER_TIER = 4;
+const T = THEME_DARK;
 
-function tierSummary(state: ReturnType<typeof seed>, id: string): string {
-  const [name] = allItems(state)[id] ?? [id];
-  return name;
-}
-
-function formatTierItems(state: ReturnType<typeof seed>, ids: string[]): string {
+function formatTierItems(state: TierState, ids: string[]): string {
   if (!ids.length) return "—";
-  const shown = ids.slice(0, MAX_PER_TIER).map((id) => tierSummary(state, id));
+  const names = allItems(state);
+  const shown = ids.slice(0, MAX_PER_TIER).map((id) => names[id]?.[0] ?? id);
   const rest = ids.length - shown.length;
   return rest > 0 ? `${shown.join("  ·  ")}  +${rest}` : shown.join("  ·  ");
 }
 
-export async function GET(req: Request) {
-  const raw = new URL(req.url).searchParams.get("s");
-  const state = (raw && decodeState(raw)) || seed("models");
-  const by = [state.by?.name, state.by?.handle].filter(Boolean).join(" · ");
+export async function GET() {
+  const state = seed("models");
+  const by = [state.by.name, state.by.handle].filter(Boolean).join(" · ");
   const ranked = state.rows.reduce((n, r) => n + r.items.length, 0);
 
   return new ImageResponse(
@@ -31,19 +31,19 @@ export async function GET(req: Request) {
           height: "100%",
           display: "flex",
           flexDirection: "column",
-          background: "linear-gradient(160deg, #0c0c0f 0%, #09090b 55%, #0a0a0d 100%)",
+          background: `linear-gradient(160deg, ${T.bgGradTop} 0%, ${T.bgGradMid} 55%, ${T.bgGradBottom} 100%)`,
           padding: "36px 40px",
           fontFamily: "sans-serif",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-            <div style={{ width: 14, height: 14, borderRadius: 4, background: "#c8f04b", flexShrink: 0 }} />
+            <div style={{ width: 14, height: 14, borderRadius: 4, background: T.lime, flexShrink: 0 }} />
             <div
               style={{
                 fontSize: 38,
                 fontWeight: 800,
-                color: "#f4f4f1",
+                color: T.fg,
                 letterSpacing: -0.5,
                 textTransform: "uppercase",
                 overflow: "hidden",
@@ -59,18 +59,18 @@ export async function GET(req: Request) {
               display: "flex",
               padding: "6px 12px",
               borderRadius: 999,
-              border: "1px solid #2a2a32",
-              background: "#111114",
+              border: `1px solid ${T.line}`,
+              background: T.panel,
               fontSize: 13,
               fontWeight: 700,
-              color: "#c8f04b",
+              color: T.lime,
               flexShrink: 0,
             }}
           >
             {ranked} ranked
           </div>
         </div>
-        <div style={{ display: "flex", fontSize: 14, color: "#8b8f98", marginTop: 8, letterSpacing: 1.5, textTransform: "uppercase" }}>
+        <div style={{ display: "flex", fontSize: 14, color: T.mut, marginTop: 8, letterSpacing: 1.5, textTransform: "uppercase" }}>
           {(by ? `By ${by} — ` : "") + "aitiermaker"}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 22, flex: 1 }}>
@@ -89,9 +89,15 @@ export async function GET(req: Request) {
                   padding: "8px 6px",
                 }}
               >
-                <div style={{ fontSize: 30, fontWeight: 900, color: "rgba(0,0,0,.82)", lineHeight: 1 }}>{r.l}</div>
-                <div style={{ fontSize: 9, fontWeight: 700, color: "rgba(0,0,0,.55)", letterSpacing: 1, marginTop: 4, textTransform: "uppercase" }}>
-                  {r.sub.slice(0, 10)}
+                <div
+                  style={{
+                    fontSize: 30,
+                    fontWeight: 900,
+                    color: inkOnDark(r.c) ? TIER_INK_CANVAS.onDark : TIER_INK_CANVAS.onLight,
+                    lineHeight: 1,
+                  }}
+                >
+                  {r.l}
                 </div>
               </div>
               <div
@@ -99,12 +105,12 @@ export async function GET(req: Request) {
                   display: "flex",
                   flex: 1,
                   borderRadius: 10,
-                  background: "#101013",
-                  border: "1px solid #232329",
+                  background: T.panel2,
+                  border: `1px solid ${T.line}`,
                   alignItems: "center",
                   padding: "0 16px",
                   fontSize: 17,
-                  color: r.items.length ? "#f2f2f0" : "#3a3a42",
+                  color: r.items.length ? T.fg : T.empty,
                   fontWeight: 600,
                   overflow: "hidden",
                 }}
@@ -114,9 +120,23 @@ export async function GET(req: Request) {
             </div>
           ))}
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 14, fontSize: 13, color: "#5c6068", letterSpacing: 1, textTransform: "uppercase" }}>
-          <span>Rank yours → aitiermaker</span>
-          <span>Open link to remix</span>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            marginTop: 14,
+            padding: "14px 20px",
+            borderRadius: 10,
+            background: T.lime,
+            fontSize: 15,
+            fontWeight: 800,
+            color: T.bg,
+            letterSpacing: 0.6,
+            textTransform: "uppercase",
+          }}
+        >
+          {pngFooterCta("aitiermaker.com")}
         </div>
       </div>
     ),

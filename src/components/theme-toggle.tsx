@@ -4,6 +4,8 @@ import { Monitor, Moon, Sun } from "lucide-react";
 import { buttonClass } from "@/components/ui/button";
 import { persistTheme, readThemeMode, type ThemeMode } from "@/lib/theme";
 import { useSyncExternalStore } from "react";
+import { cn } from "@/lib/cn";
+import { iconCrossfadeIn, iconCrossfadeOut, iconCrossfadeWrap } from "@/lib/ui-styles";
 
 const ORDER: ThemeMode[] = ["light", "dark", "system"];
 
@@ -22,6 +24,12 @@ function label(mode: ThemeMode) {
   return "System theme";
 }
 
+const ICONS: [ThemeMode, typeof Sun][] = [
+  ["light", Sun],
+  ["dark", Moon],
+  ["system", Monitor],
+];
+
 export function ThemeToggle() {
   const mode = useSyncExternalStore(subscribe, readThemeMode, () => "system" as ThemeMode);
 
@@ -32,9 +40,11 @@ export function ThemeToggle() {
 
   return (
     <button type="button" className={buttonClass("icon")} onClick={cycle} aria-label={label(mode)} title={label(mode)}>
-      {mode === "light" && <Sun size={14} strokeWidth={2} aria-hidden="true" />}
-      {mode === "dark" && <Moon size={14} strokeWidth={2} aria-hidden="true" />}
-      {mode === "system" && <Monitor size={14} strokeWidth={2} aria-hidden="true" />}
+      <span className={iconCrossfadeWrap} aria-hidden="true">
+        {ICONS.map(([m, Icon]) => (
+          <Icon key={m} size={14} strokeWidth={2} className={cn(mode === m ? iconCrossfadeIn : iconCrossfadeOut)} />
+        ))}
+      </span>
     </button>
   );
 }

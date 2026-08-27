@@ -1,16 +1,15 @@
-import { DEFAULT_ROWS, PRESETS } from "@/data/presets";
+import { DEFAULT_ROWS, PRESETS, findPreset } from "@/data/presets";
 import { ITEMS } from "@/data/catalog";
 import { isUploadedImage } from "@/lib/logos";
 import type { TierRow, TierState } from "@/lib/types";
 
 export const LS_STATE = "aitier.state";
 
-/** A shared `?s=` payload is untrusted input, so bound what it can create. */
+/** A compact wire payload is untrusted input, so bound what it can create. */
 const MAX_ROWS = 24;
 const MAX_PLACED = 400;
 const MAX_TITLE = 120;
 const MAX_LABEL = 24;
-const MAX_SUB = 40;
 const MAX_NAME = 60;
 const MAX_DOMAIN = 120;
 const MAX_ID = 64;
@@ -19,10 +18,6 @@ const MAX_IMAGE = 24_000;
 const MAX_IMAGES = 40;
 
 const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
-
-export function b64e(s: string): string {
-  return btoa(unescape(encodeURIComponent(s))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
 
 export function b64d(s: string): string {
   return decodeURIComponent(escape(atob(s.replace(/-/g, "+").replace(/_/g, "/"))));
@@ -54,7 +49,7 @@ export function seed(
   by?: TierState["by"],
   labels: Record<string, string> = {},
 ): TierState {
-  const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[0];
+  const preset = findPreset(presetId);
   const rows = DEFAULT_ROWS.map((r) => ({ ...r, items: [...(preset.seed[r.l] ?? [])] }));
   const placed = new Set(Object.values(preset.seed).flat());
   // Custom items belong to the board, not to the preset. Keeping them in the
@@ -63,26 +58,10 @@ export function seed(
   return { p: preset.id, t: preset.title, rows, pool, customs, labels, by: by ?? { name: "", handle: "" } };
 }
 
-type CompactRow = { i: string[]; l?: string; sub?: string; c?: string };
+type CompactRow = { i: string[]; l?: string; c?: string };
 
 function defaultRow(index: number): TierRow {
   return DEFAULT_ROWS[index % DEFAULT_ROWS.length];
-}
-
-function rowMetaDiff(r: TierRow, index: number): Omit<CompactRow, "i"> {
-  const d = defaultRow(index);
-  const out: Omit<CompactRow, "i"> = {};
-  if (r.l !== d.l) out.l = r.l;
-  if (r.sub !== d.sub) out.sub = r.sub;
-  if (r.c !== d.c) out.c = r.c;
-  return out;
-}
-
-function compactRows(rows: TierRow[]): string[][] | CompactRow[] {
-  const defaultLayout =
-    rows.length === DEFAULT_ROWS.length && rows.every((r, i) => Object.keys(rowMetaDiff(r, i)).length === 0);
-  if (defaultLayout) return rows.map((r) => r.items);
-  return rows.map((r, i) => ({ i: r.items, ...rowMetaDiff(r, i) }));
 }
 
 function expandRows(raw: unknown): TierRow[] | null {
@@ -90,7 +69,7 @@ function expandRows(raw: unknown): TierRow[] | null {
   if (Array.isArray(raw[0])) {
     return raw.slice(0, MAX_ROWS).map((items, i) => {
       const d = defaultRow(i);
-      return { l: d.l, sub: d.sub, c: d.c, items: idList(items) };
+      return { l: d.l, sub: "", c: d.c, items: idList(items) };
     });
   }
   const rows: TierRow[] = [];
@@ -102,26 +81,12 @@ function expandRows(raw: unknown): TierRow[] | null {
     const d = defaultRow(i);
     rows.push({
       l: text(row.l, MAX_LABEL).trim() || d.l,
-      sub: text(row.sub, MAX_SUB) || d.sub,
+      sub: "",
       c: typeof row.c === "string" && HEX.test(row.c.trim()) ? row.c.trim() : d.c,
       items: idList(items),
     });
   });
   return rows.length ? rows : null;
-}
-
-function compactCustoms(customs: TierState["customs"]): Record<string, [string, string]> | undefined {
-  const out: Record<string, [string, string]> = {};
-  for (const [id, [name, value]] of Object.entries(customs)) {
-    out[id] = [name, isUploadedImage(value) ? "" : value];
-  }
-  return Object.keys(out).length ? out : undefined;
-}
-
-function compactBy(by: TierState["by"]): [string, string] | undefined {
-  const name = by.name.trim();
-  const handle = by.handle.trim();
-  return name || handle ? [name, handle] : undefined;
 }
 
 function expandBy(raw: unknown): TierState["by"] {
@@ -133,21 +98,6 @@ function expandBy(raw: unknown): TierState["by"] {
     return { name: text(b.name, MAX_NAME), handle: text(b.handle, MAX_NAME) };
   }
   return { name: "", handle: "" };
-}
-
-function compactWire(s: TierState): Record<string, unknown> {
-  const preset = PRESETS.find((p) => p.id === s.p);
-  const wire: Record<string, unknown> = { p: s.p, r: compactRows(s.rows) };
-  const title = s.t.trim();
-  if (title && title !== (preset?.title ?? "")) wire.t = title;
-  if (s.pool.length) wire.o = s.pool;
-  const customs = compactCustoms(s.customs);
-  if (customs) wire.c = customs;
-  if (s.labels && Object.keys(s.labels).length) wire.l = s.labels;
-  const by = compactBy(s.by);
-  if (by) wire.b = by;
-  if (s.src?.trim()) wire.s = s.src.trim();
-  return wire;
 }
 
 function expandWire(value: Record<string, unknown>): TierState | null {
@@ -170,44 +120,17 @@ function expandWire(value: Record<string, unknown>): TierState | null {
 
   const title = text(value.t, MAX_TITLE).trim();
   const presetId = typeof value.p === "string" ? value.p : PRESETS[0].id;
-  const preset = PRESETS.find((p) => p.id === presetId);
+  const preset = findPreset(presetId);
 
   return {
     p: presetId,
-    t: title || preset?.title || "Untitled",
+    t: title || preset.title || "Untitled",
     rows: rows.map((r) => ({ ...r, items: take(r.items) })),
     pool: take(idList(value.o ?? value.pool)),
     customs: asCustoms(value.c ?? value.customs),
     labels: asLabels(value.l ?? value.labels),
     by: expandBy(value.b ?? value.by),
-    src: text(value.s ?? value.src, MAX_NAME).trim() || undefined,
   };
-}
-
-/**
- * Encode for the `?s=` link — compact wire format with short keys.
- *
- * Uploaded images are dropped: a few inline icons would push the URL past what
- * browsers and social sites will carry. Recipients see letter marks for those
- * items, while the author's stored copy keeps the images.
- */
-export function encodeState(s: TierState): string {
-  return b64e(JSON.stringify(compactWire(s)));
-}
-
-export function shareCaption(s: TierState): string {
-  const author = s.by.handle || s.by.name;
-  const remixed = s.src ? ` · remixed from ${s.src}` : "";
-  const ranked = s.rows.reduce((n, r) => n + r.items.length, 0);
-  const hook = ranked ? `${ranked} ranked` : "rank yours";
-  return author ? `${s.t} — ${hook} by ${author}${remixed}` : `${s.t} — ${hook}${remixed}`;
-}
-
-export function shareLink(s: TierState, origin: string, pathname: string): { url: string; text: string; og: string } {
-  const encoded = encodeState(s);
-  const url = `${origin}${pathname}?s=${encoded}`;
-  const og = `/og?s=${encodeURIComponent(encoded)}`;
-  return { url, text: shareCaption(s), og };
 }
 
 function asRow(value: unknown, index: number): TierRow | null {
@@ -218,7 +141,7 @@ function asRow(value: unknown, index: number): TierRow | null {
   const color = typeof r.c === "string" ? r.c.trim() : "";
   return {
     l: text(r.l, MAX_LABEL).trim() || fallback.l,
-    sub: text(r.sub, MAX_SUB),
+    sub: "",
     c: HEX.test(color) ? color : fallback.c,
     items: idList(r.items),
   };
@@ -285,7 +208,6 @@ function asState(value: unknown): TierState | null {
       name: text(s.by?.name, MAX_NAME),
       handle: text(s.by?.handle, MAX_NAME),
     },
-    src: text(s.src, MAX_NAME).trim() || undefined,
   };
 }
 
@@ -311,12 +233,6 @@ export function parseStored(raw: string): TierState | null {
 
 export function loadState(): TierState {
   if (typeof window === "undefined") return seed(PRESETS[0].id);
-  const sp = new URLSearchParams(window.location.search);
-  const fromUrl = sp.get("s");
-  if (fromUrl) {
-    const s = decodeState(fromUrl);
-    if (s) return s;
-  }
   try {
     const raw = localStorage.getItem(LS_STATE);
     if (raw) {
@@ -338,11 +254,3 @@ export function allItems(s: TierState): Record<string, [string, string]> {
   return out;
 }
 
-export function fmtCtx(ctx?: number): string {
-  if (!ctx || !Number.isFinite(ctx) || ctx <= 0) return "—";
-  if (ctx >= 1_000_000) {
-    const m = ctx / 1_000_000;
-    return `${Number.isInteger(m) ? m : m.toFixed(1)}M`;
-  }
-  return `${Math.round(ctx / 1000)}K`;
-}
